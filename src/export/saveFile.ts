@@ -40,3 +40,18 @@ export function formatBytes(n: number): string {
   if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`
   return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`
 }
+
+/**
+ * A WritableStream over a FileSystemWritableFileStream whose `close()` commits the file only when
+ * `guard.ok` is still true; otherwise it aborts, discarding the partial swap file (so a cancelled or
+ * failed export never overwrites the file the user picked with a truncated one).
+ */
+export function guardedWritable(writable: FileSystemWritableFileStream): { stream: WritableStream<{ type: 'write'; data: Uint8Array<ArrayBuffer>; position: number } | Uint8Array<ArrayBuffer>>; guard: { ok: boolean } } {
+  const guard = { ok: true }
+  const stream = new WritableStream<{ type: 'write'; data: Uint8Array<ArrayBuffer>; position: number } | Uint8Array<ArrayBuffer>>({
+    write: (chunk) => writable.write(chunk as FileSystemWriteChunkType),
+    close: () => (guard.ok ? writable.close() : writable.abort()),
+    abort: (reason) => writable.abort(reason),
+  })
+  return { stream, guard }
+}

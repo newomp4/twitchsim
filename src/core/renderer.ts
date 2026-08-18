@@ -18,6 +18,8 @@ export interface RenderOptions {
 }
 
 interface CacheEntry {
+  /** the message object this layout was computed for (ids restart at 1 for every new timeline) */
+  msg: ChatMessage
   layout: RowLayout
   key: string
   assetsVersion: number
@@ -102,7 +104,7 @@ export class ChatRenderer {
     const deleted = msg.deletedAt !== undefined && tNow >= msg.deletedAt
     const key = `${deleted ? 'd' : 'n'}|${o.style.alternateBg ? index % 2 : 0}`
     const e = this.cache.get(msg.id)
-    if (e && e.key === key && (!e.hadMissing || e.assetsVersion === this.assets.version)) return e.layout
+    if (e && e.msg === msg && e.key === key && (!e.hadMissing || e.assetsVersion === this.assets.version)) return e.layout
     const layout = layoutMessage(msg, { style: o.style, assets: this.assets, hiRes: o.hiRes }, tNow, index)
     // did any emote image lack a loaded bitmap? then re-layout once assets change
     let hadMissing = false
@@ -112,7 +114,7 @@ export class ChatRenderer {
         this.assets.request(o.hiRes ? f.url4x : f.url)
       }
     }
-    this.cache.set(msg.id, { layout, key, assetsVersion: this.assets.version, hadMissing })
+    this.cache.set(msg.id, { msg, layout, key, assetsVersion: this.assets.version, hadMissing })
     return layout
   }
 
@@ -152,7 +154,7 @@ export class ChatRenderer {
     while (idx >= 0 && yBottom > -50) {
       const m = msgs[idx]
       idx--
-      if (m.t < clearT && !(m.notice?.kind === 'clear')) continue
+      if (m.t < clearT) continue // everything before the latest /clear is gone (the clear notice itself sits at clearT)
       const layout = this.layoutFor(m, o, tMs, idx + 1)
       const anim = rowAnimation(o.animation, tMs - m.t, animMs, W)
       const allotted = layout.height * anim.grow
@@ -399,7 +401,7 @@ function transparentize(color: string): string {
 }
 
 /** Power-up "message effects" backgrounds (approximations of Twitch's animated effects). */
-function drawEffect(ctx: Ctx2D, effect: NonNullable<ChatMessage['effect']>, x: number, y: number, w: number, h: number, tMs: number): void {
+export function drawEffect(ctx: Ctx2D, effect: NonNullable<ChatMessage['effect']>, x: number, y: number, w: number, h: number, tMs: number): void {
   ctx.save()
   const t = tMs / 1000
   if (effect === 'rainbow-eclipse') {
@@ -461,14 +463,18 @@ export function collectAssetUrls(tl: Timeline, hiRes: boolean, style: RenderStyl
         const u = hiRes ? (b.url4x ?? b.url) : b.url
         if (u) urls.add(u)
         else {
-          // global badge: computed by layout via badgeUrl; replicate here lazily
+          // global badge: computed by layout via badgeUrl; also preload the SVG fallback the renderer uses if the CDN fails
           const { badgeUrl, fallbackBadgeUrl } = badgeApi
           urls.add(badgeUrl(b, hiRes ? 4 : 1) ?? fallbackBadgeUrl(b.set))
+          urls.add(fallbackBadgeUrl(b.set))
         }
       }
     }
     for (const f of m.fragments) {
-      if (f.kind === 'emote' || f.kind === 'cheer') urls.add(hiRes ? f.url4x : f.url)
+      if (f.kind === 'emote' || f.kind === 'cheer') {
+        urls.add(hiRes ? f.url4x : f.url)
+        if (hiRes) urls.add(f.url) // the 1× fallback the renderer switches to if the 4× file is missing
+      }
     }
   }
   return [...urls]

@@ -62,19 +62,38 @@ export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Con
               <span className="tb-title">Your lines</span>
               <span className="tb-info">{scriptInfo}</span>
               <span className="tb-spacer" />
-              <button type="button" className="btn small" onClick={() => fileRef.current?.click()} title="Import a .json or .txt file">
-                Import file
+              <button type="button" className="btn small" onClick={() => fileRef.current?.click()} title="Import a .txt (one message per line) or .json file">
+                Import
               </button>
-              <button type="button" className="btn small" onClick={copyPrompt} title="Copy a prompt for ChatGPT / Claude that outputs a compatible JSON file">
-                {copied ? 'Copied ✓' : 'Copy AI prompt'}
+              <button type="button" className="btn small" onClick={copyPrompt} title="Copy a prompt for ChatGPT / Claude / Gemini that writes lines in this format">
+                {copied ? 'Copied ✓' : 'AI prompt'}
               </button>
-              <button type="button" className="btn small" onClick={() => set('script', SAMPLE_SCRIPT)}>
+              <button type="button" className="btn small" onClick={() => set('script', SAMPLE_SCRIPT)} title="Replace the lines with the built-in example">
                 Example
               </button>
-              <button type="button" className="btn small" onClick={() => set('script', '')}>
+              <button
+                type="button"
+                className="btn small"
+                title="Remove all lines"
+                onClick={() => {
+                  const n = cfg.script.split(/\r?\n/).filter((l) => l.trim()).length
+                  if (n > 3 && !confirm(`Clear all ${n} lines?`)) return
+                  set('script', '')
+                }}
+              >
                 Clear
               </button>
-              <input ref={fileRef} type="file" accept=".json,.txt,application/json,text/plain" hidden onChange={(e) => e.target.files?.[0] && importFile(e.target.files[0])} />
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".json,.txt,application/json,text/plain"
+                hidden
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) void importFile(f)
+                  e.target.value = '' // allow importing the same file again later
+                }}
+              />
             </div>
             <textarea
               className="script"
@@ -92,14 +111,15 @@ export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Con
             />
             <p className="hint">
               One message per line: <code>username: message</code>. A line without a name is said by a random viewer. Paste what your AI wrote (Help tab has the prompt), or drop a .txt/.json file onto the box.
+              {cfg.mode === 'script' && !cfg.script.trim() && <b> No lines yet — generated chat is shown until you add some.</b>}
             </p>
           </>
         )}
         {usesFiller && (
           <>
-            <Toggle label="Filler re-uses my lines (shuffled) instead of generic chatter" value={cfg.fillerFromScript} onChange={(v) => set('fillerFromScript', v)} hint="Keeps the whole chat on your topic: filler messages are random picks from the lines above." />
+            {usesLines && <Toggle label="Filler re-uses my lines (shuffled) instead of generic chatter" value={cfg.fillerFromScript} onChange={(v) => set('fillerFromScript', v)} hint="Keeps the whole chat on your topic: filler messages are random picks from the lines above." />}
             <Row>
-              {!cfg.fillerFromScript && <Select label="Filler chatter vibe" value={cfg.mood} options={MOODS} onChange={(v) => set('mood', v)} />}
+              {!(cfg.fillerFromScript && usesLines) && <Select label="Filler chatter vibe" value={cfg.mood} options={MOODS} onChange={(v) => set('mood', v)} />}
               {cfg.mode === 'mixed' && <Slider label="Filler messages between my lines" value={cfg.scriptGapMultiplier} min={0} max={20} step={1} onChange={(v) => set('scriptGapMultiplier', v)} />}
             </Row>
           </>
@@ -123,13 +143,14 @@ export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Con
           min={1}
           max={1500}
           step={1}
+          log
           onChange={(v) => set('messagesPerMinute', v)}
           format={(v) => (cfg.pacing === 'even' ? `one message every ${(60 / v).toFixed(2)} s (${v}/min)` : `${v} msg/min`)}
           hint={cfg.pacing === 'even' ? 'Perfectly regular. !wait pauses in your lines are still honored; bursts and crowd reactions are off.' : '10–30 = small stream · 100–300 = mid-size · 500+ = huge (unreadable, like real big chats)'}
         />
         <Row>
           <Toggle label="Start with the chat already full" value={cfg.prefillSec > 0} onChange={(v) => set('prefillSec', v ? 20 : 0)} />
-          <Toggle label="Loop-friendly: end right after my last line" value={cfg.durationAuto} onChange={(v) => set('durationAuto', v)} />
+          {usesLines && <Toggle label="Loop-friendly: end right after my last line" value={cfg.durationAuto} onChange={(v) => set('durationAuto', v)} />}
         </Row>
         {!cfg.durationAuto || !usesLines ? (
           <Slider label="Duration" value={cfg.durationSec} min={1} max={600} onChange={(v) => set('durationSec', v)} format={(v) => `${v}s`} />
@@ -150,9 +171,9 @@ export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Con
             🎲
           </button>
         </Row>
-        <Slider label="Random chatters in the pool" value={cfg.chatterPoolSize} min={3} max={2000} step={1} onChange={(v) => set('chatterPoolSize', v)} hint="A few of them chat a lot, most rarely — like real chat." />
+        <Slider label="Random chatters in the pool" value={cfg.chatterPoolSize} min={3} max={2000} step={1} log onChange={(v) => set('chatterPoolSize', v)} hint="A few of them chat a lot, most rarely — like real chat." />
         <Field label="Extra usernames (comma or newline separated)" hint='Optional. "Display (login)" sets both. Users defined in your JSON are added automatically.'>
-          <textarea value={cfg.customNames} onChange={(e) => set('customNames', e.target.value)} rows={2} placeholder="xqc, pokimane, Kai Cenat (kaicenat)" />
+          <textarea aria-label="Extra usernames" value={cfg.customNames} onChange={(e) => set('customNames', e.target.value)} rows={2} placeholder="xqc, pokimane, Kai Cenat (kaicenat)" />
         </Field>
         <Row>
           <Toggle label="Only use my usernames" value={cfg.customNamesOnly} onChange={(v) => set('customNamesOnly', v)} />

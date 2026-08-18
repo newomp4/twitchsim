@@ -6,7 +6,7 @@ import { computeGeometry } from '../../export/exporter'
 import { FRAME_PRESETS } from '../../core/defaults'
 import { Section, Row, Segmented, NumberInput, Select, Field, TextInput, Collapsible, Slider } from '../controls'
 import { buildInAE, hostInfoAE, safeCompName, buildKeyFor, type AEProgress, type AEBuildResult, type AEHostInfo } from '../../ae/build'
-import { callHost, pickFolder, revealPath, systemPath, hostInfo } from '../../ae/cep'
+import { callHost, pickFolder, revealPath, systemPath, hostInfo, posixPath } from '../../ae/cep'
 
 const STORAGE = 'twitchsim.ae.v1'
 
@@ -53,8 +53,8 @@ export function AEPanel({ cfg, set, patch, timeline, assets }: { cfg: Config; se
   useEffect(refreshInfo, [])
 
   const compName = safeCompName(prefs.compName)
-  const defaultRoot = info?.projectDir ? `${info.projectDir}/TwitchSim` : `${systemPath('myDocuments')}/TwitchSim`
-  const root = prefs.folder || defaultRoot
+  const rootFor = (i: AEHostInfo | null) => prefs.folder || (i?.projectDir ? `${posixPath(i.projectDir)}/TwitchSim` : `${systemPath('myDocuments')}/TwitchSim`)
+  const root = rootFor(info)
   const folder = `${root}/${buildKeyFor(compName)}`
 
   const start = async () => {
@@ -64,7 +64,16 @@ export function AEPanel({ cfg, set, patch, timeline, assets }: { cfg: Config; se
     abortRef.current = ac
     setProgress({ phase: 'assets', done: 0, total: 1, message: 'Starting…' })
     try {
-      const res = await buildInAE(cfg, timeline, assets, { compName, folder, signal: ac.signal }, setProgress)
+      // the project may have been saved/renamed since the panel opened: images go next to the current project
+      let liveInfo = info
+      try {
+        liveInfo = await hostInfoAE()
+        setInfo(liveInfo)
+      } catch {
+        /* keep what we had */
+      }
+      const liveFolder = `${rootFor(liveInfo)}/${buildKeyFor(compName)}`
+      const res = await buildInAE(cfg, timeline, assets, { compName, folder: liveFolder, signal: ac.signal }, setProgress)
       setResult(res)
       ;(window as unknown as { __twitchsim?: Record<string, unknown> }).__twitchsim = { ...((window as unknown as { __twitchsim?: Record<string, unknown> }).__twitchsim ?? {}), lastAEBuild: res }
       refreshInfo()
@@ -127,7 +136,7 @@ export function AEPanel({ cfg, set, patch, timeline, assets }: { cfg: Config; se
         </Field>
         <Row>
           <Select label="Frame rate" value={String(cfg.exportFps)} onChange={(v) => set('exportFps', parseInt(v, 10))} options={[{ value: '24', label: '24 fps' }, { value: '25', label: '25 fps' }, { value: '30', label: '30 fps' }, { value: '50', label: '50 fps' }, { value: '60', label: '60 fps' }]} />
-          <Slider label="Duration (s)" value={cfg.durationSec} min={1} max={600} onChange={(v) => patch({ durationSec: v, durationAuto: false })} format={(v) => `${v}s`} hint={cfg.durationAuto ? 'auto (from your lines) — moving this switches to fixed' : ''} />
+          <Slider label="Duration (s)" value={cfg.durationAuto ? Math.round(timeline.durationMs / 100) / 10 : cfg.durationSec} min={1} max={600} onChange={(v) => patch({ durationSec: v, durationAuto: false })} format={(v) => (cfg.durationAuto ? `${v}s (auto)` : `${v}s`)} hint={cfg.durationAuto ? 'ends right after your last line — moving this switches to a fixed length' : ''} />
         </Row>
         <p className="hint">
           Comp: <b>{geo.outW}×{geo.outH}</b> · chat {geo.chatW}×{geo.chatH} at ({geo.chatX},{geo.chatY}) · {(timeline.durationMs / 1000).toFixed(1)}s @ {cfg.exportFps}fps · {timeline.messages.length} messages

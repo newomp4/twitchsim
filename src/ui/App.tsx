@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useConfig, useSimConfig, encodeShare } from './useConfig'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useConfig, useSimConfig, encodeShare, sanitize } from './useConfig'
 import { Preview, Transport, usePlayer } from './Preview'
+import { copyText } from './controls'
 import { ChatPanel } from './panels/ChatPanel'
 import { StylePanel } from './panels/StylePanel'
 import { ExportPanel } from './panels/ExportPanel'
@@ -12,13 +13,14 @@ import { EmoteRegistry, TWITCH_GLOBAL_EMOTES, SEVENTV_EMOTES, customEmoteDefs } 
 import { buildTimeline } from '../core/simulation'
 import { generateSubBadgeSet } from '../core/badges'
 import { Rng } from '../core/rng'
-import type { ChannelData } from '../core/channel'
+import { loadChannel, type ChannelData } from '../core/channel'
 import { ensureFonts } from '../core/fonts'
 import type { Config } from '../core/types'
 import { DEFAULT_CONFIG } from '../core/defaults'
 import { makeFrameSource } from '../export/exporter'
 import { collectAssetUrls } from '../core/renderer'
 import { styleFromConfig } from '../core/layout'
+import { compileScene } from '../ae/scene'
 
 const IN_AE = isCEP()
 const TABS = (IN_AE ? ['Chat', 'Style', 'After Effects', 'Help'] : ['Chat', 'Style', 'Export', 'Help']) as readonly ('Chat' | 'Style' | 'Export' | 'After Effects' | 'Help')[]
@@ -30,6 +32,11 @@ const assets = new AssetCache()
 export default function App() {
   const { cfg, set, patch, reset, setCfg } = useConfig()
   const [tab, setTab] = useState<Tab>('Chat')
+  const panelBodyRef = useRef<HTMLDivElement>(null)
+  // each tab starts at its top (the panel keeps one scroll container for all tabs)
+  useEffect(() => {
+    panelBodyRef.current?.scrollTo({ top: 0 })
+  }, [tab])
   const [channel, setChannel] = useState<ChannelData | null>(null)
   const [fontsReady, setFontsReady] = useState(false)
   const [zoom, setZoom] = useState<number | 'fit' | 'auto'>('auto')
@@ -40,9 +47,31 @@ export default function App() {
     const g = window as unknown as { __twitchsim?: Record<string, unknown> }
     g.__twitchsim = { ...(g.__twitchsim ?? {}), patch, assets, callHost, evalScript, ensureHost }
   }, [patch])
+  const firstAnimRef = useRef(true)
   useEffect(() => {
     assets.animated = cfg.animatedEmotes
+    // decoded frames vs. still bitmaps are baked into the cache: reload emotes when the toggle flips
+    if (firstAnimRef.current) firstAnimRef.current = false
+    else assets.clear()
   }, [cfg.animatedEmotes])
+  // a real channel loaded in a previous session: fetch its badges/emotes again (they are not persisted)
+  const wantedChannel = cfg.loadedChannel
+  useEffect(() => {
+    if (!wantedChannel || channel) return
+    let cancelled = false
+    loadChannel(wantedChannel).then(
+      (data) => {
+        if (!cancelled) setChannel(data)
+      },
+      () => {
+        /* offline or channel gone: keep the generated badges */
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantedChannel])
 
   const simCfg = useSimConfig(cfg)
   const registry = useMemo(() => {
@@ -83,7 +112,9 @@ export default function App() {
       src.render(Math.round((tMs / 1000) * cfg.exportFps))
       return src.canvas.convertToBlob({ type: 'image/png' })
     }
-    g.__twitchsim = { ...(g.__twitchsim ?? {}), timeline, snapshot }
+    // scene(name?) compiles the After Effects scene description (used by the AE panel; handy for tests)
+    const scene = (compName = 'debug') => compileScene(cfg, timeline, assets, { compName, buildKey: compName })
+    g.__twitchsim = { ...(g.__twitchsim ?? {}), timeline, snapshot, scene }
   }, [timeline, cfg])
   const player = usePlayer(timeline.durationMs)
   // restart playback when the simulation changes
@@ -95,11 +126,12 @@ export default function App() {
   // keyboard shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return // leave browser shortcuts (Cmd+R, Cmd+N…) alone
       const el = e.target as HTMLElement
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return
       if (e.code === 'Space') {
         e.preventDefault()
-        player.setPlaying(!player.playing)
+        player.toggle()
       } else if (e.key === 'r' || e.key === 'R') player.restart()
       else if (e.key === 'n' || e.key === 'N') set('seed', Math.random().toString(36).slice(2, 8))
     }
@@ -107,12 +139,10 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [player, set])
 
-  const share = () => {
+  const share = async () => {
     const url = `${location.origin}${location.pathname}#c=${encodeShare(cfg)}`
-    navigator.clipboard?.writeText(url).then(
-      () => alert('Share link copied to clipboard'),
-      () => prompt('Copy this link', url),
-    )
+    if (await copyText(url)) alert('Share link copied to clipboard')
+    else prompt('Copy this link', url)
   }
   const savePreset = () => {
     if (IN_AE) {
@@ -126,6 +156,7 @@ export default function App() {
     a.href = URL.createObjectURL(blob)
     a.download = `twitchsim-${cfg.seed}.json`
     a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000)
   }
   const loadPreset = () => {
     const input = document.createElement('input')
@@ -136,7 +167,7 @@ export default function App() {
       if (!f) return
       try {
         const j = JSON.parse(await f.text()) as Partial<Config>
-        setCfg({ ...DEFAULT_CONFIG, ...j })
+        setCfg({ ...DEFAULT_CONFIG, ...sanitize(j) })
       } catch {
         alert('Invalid preset file')
       }
@@ -186,11 +217,20 @@ export default function App() {
               </button>
             ))}
           </nav>
-          <div className="panel-body">
+          <div className="panel-body" ref={panelBodyRef}>
             {tab === 'Chat' && <ChatPanel cfg={cfg} set={set} />}
             {tab === 'Style' && <StylePanel cfg={cfg} set={set} patch={patch} channel={channel} setChannel={setChannel} />}
-            {tab === 'Export' && <ExportPanel cfg={cfg} set={set} patch={patch} timeline={timeline} assets={assets} />}
-            {tab === 'After Effects' && <AEPanel cfg={cfg} set={set} patch={patch} timeline={timeline} assets={assets} />}
+            {/* export/build panels stay mounted so a running job keeps its progress + Cancel while you look at other tabs */}
+            {!IN_AE && (
+              <div hidden={tab !== 'Export'}>
+                <ExportPanel cfg={cfg} set={set} patch={patch} timeline={timeline} assets={assets} />
+              </div>
+            )}
+            {IN_AE && (
+              <div hidden={tab !== 'After Effects'}>
+                <AEPanel cfg={cfg} set={set} patch={patch} timeline={timeline} assets={assets} />
+              </div>
+            )}
             {tab === 'Help' && <HelpPanel />}
           </div>
         </aside>

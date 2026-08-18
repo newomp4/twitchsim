@@ -49,6 +49,11 @@ export function hostInfo(): { app: string; version: string } | null {
   }
 }
 
+/** JSON that is safe to embed in ExtendScript source / eval (U+2028/2029 are line terminators there). */
+export function jsonForES3(v: unknown): string {
+  return JSON.stringify(v).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')
+}
+
 /** Runs ExtendScript in the host and resolves with its string result. */
 export function evalScript(code: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -81,7 +86,7 @@ export function ensureHost(): Promise<void> {
 /** Calls TWITCHSIM.<fn>(args) in the host script; args/results travel as JSON. */
 export async function callHost<T = unknown>(fn: string, args?: unknown): Promise<T> {
   await ensureHost()
-  const payload = JSON.stringify(args ?? null)
+  const payload = jsonForES3(args ?? null)
   const res = await evalScript(`(function(){ try { return TWITCHSIM.${fn}(${JSON.stringify(payload)}); } catch (e) { return '{"error":' + TWITCHSIM_JSON.quote(String(e && e.message ? e.message + (e.line ? ' (line ' + e.line + ')' : '') : e)) + '}'; } })()`)
   if (res === 'EvalScript error.') throw new Error('The After Effects side of the panel failed to load (EvalScript error). Try reopening the panel.')
   let parsed: unknown
@@ -94,12 +99,17 @@ export async function callHost<T = unknown>(fn: string, args?: unknown): Promise
   return parsed as T
 }
 
+/** Forward slashes everywhere (ExtendScript hands out `C:\\Users\\…` on Windows, CEP accepts either). */
+export function posixPath(p: string): string {
+  return p.replace(/\\/g, '/').replace(/\/{2,}/g, '/').replace(/\/$/, '')
+}
+
 /** CEP hands system paths out as file:// URLs on some builds — normalize to plain paths. */
 function fromFileUrl(u: string): string {
-  if (!u.startsWith('file://')) return u
+  if (!u.startsWith('file://')) return posixPath(u)
   let p = decodeURI(u.slice(7))
   if (/^\/[A-Za-z]:/.test(p)) p = p.slice(1) // Windows: /C:/Users → C:/Users
-  return p
+  return posixPath(p)
 }
 
 export function systemPath(type: 'userData' | 'extension' | 'myDocuments' | 'hostApplication'): string {
@@ -108,23 +118,28 @@ export function systemPath(type: 'userData' | 'extension' | 'myDocuments' | 'hos
 
 export function mkdirp(path: string): void {
   const fs = window.cep!.fs
-  const parts = path.split('/')
+  const norm = posixPath(path)
+  const parts = norm.split('/')
   let cur = ''
-  for (const p of parts) {
-    if (!p) {
-      cur = '/'
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i]
+    if (i === 0) {
+      // root: "" for /Users/… (absolute POSIX) or "C:" for Windows
+      cur = p === '' ? '/' : /^[A-Za-z]:$/.test(p) ? p + '/' : p + '/'
+      if (p !== '' && !/^[A-Za-z]:$/.test(p)) {
+        const st0 = fs.stat(p)
+        if (st0.err !== 0 && fs.makedir(p).err !== 0) throw new Error(`Could not create folder ${p}`)
+      }
       continue
     }
-    if (!cur && /^[A-Za-z]:$/.test(p)) {
-      cur = p // Windows drive root
-      continue
-    }
-    cur = cur.endsWith('/') ? cur + p : cur + '/' + p
+    if (!p) continue
+    cur = cur + p
     const st = fs.stat(cur)
     if (st.err !== 0) {
       const r = fs.makedir(cur)
       if (r.err !== 0) throw new Error(`Could not create folder ${cur} (error ${r.err})`)
     }
+    cur += '/'
   }
 }
 
@@ -141,9 +156,10 @@ export function writeBase64(path: string, base64: string): void {
 export function pickFolder(title: string, initial: string): string | null {
   const r = window.cep!.fs.showOpenDialogEx(false, true, title, initial)
   if (r.err !== 0 || !r.data || !r.data.length) return null
-  return r.data[0]
+  return posixPath(fromFileUrl(r.data[0]))
 }
 
 export function revealPath(path: string): void {
-  window.cep?.util.openURLInDefaultBrowser('file://' + encodeURI(path))
+  const p = posixPath(path)
+  window.cep?.util.openURLInDefaultBrowser('file:///' + encodeURI(p.replace(/^\//, '')))
 }

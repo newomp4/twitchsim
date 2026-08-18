@@ -46,9 +46,9 @@ export function computeGeometry(cfg: Config): ExportGeometry {
   let chatX = 0
   let chatY = 0
   if (cfg.framePreset !== 'chat') {
-    const p = FRAME_PRESETS[cfg.framePreset]
-    outW = cfg.framePreset === 'custom' ? cfg.frameW : p.w
-    outH = cfg.framePreset === 'custom' ? cfg.frameH : p.h
+    const p = FRAME_PRESETS[cfg.framePreset] ?? FRAME_PRESETS.chat
+    outW = cfg.framePreset === 'custom' ? cfg.frameW : p.w || chatW
+    outH = cfg.framePreset === 'custom' ? cfg.frameH : p.h || chatH
     const mx = cfg.marginX
     const my = cfg.marginY
     const a = cfg.anchor
@@ -118,7 +118,8 @@ export interface ExportParams {
 }
 
 export function suggestedFilename(cfg: Config): string {
-  const base = `twitchsim-${cfg.seed.replace(/[^a-z0-9_-]/gi, '')}-${cfg.exportFps}fps`
+  const seed = cfg.seed.replace(/[^a-z0-9_-]/gi, '')
+  const base = `twitchsim${seed && seed !== 'twitchsim' ? '-' + seed : ''}-${cfg.exportFps}fps`
   switch (cfg.exportFormat) {
     case 'png-seq':
       return `${base}-png.zip`
@@ -155,7 +156,10 @@ export async function runExport(p: ExportParams): Promise<ExportResult> {
   const geometry = computeGeometry(cfg)
   const urls = collectAssetUrls(tl, geometry.scale > 1.25, style)
   onProgress({ phase: 'loading-assets', frame: 0, totalFrames: 0, percent: 0, message: `Loading ${urls.length} images…` })
-  await assets.loadAll(urls, (done, total) => onProgress({ phase: 'loading-assets', frame: done, totalFrames: total, percent: total ? (done / total) * 100 : 100, message: `Loading images ${done}/${total}` }))
+  await assets.loadAll(urls, (done, total) => {
+    if (signal.aborted) throw new DOMException('cancelled', 'AbortError') // Cancel works while images load, too
+    onProgress({ phase: 'loading-assets', frame: done, totalFrames: total, percent: total ? (done / total) * 100 : 100, message: `Loading images ${done}/${total}` })
+  })
   if (signal.aborted) throw new DOMException('cancelled', 'AbortError')
   const source = makeFrameSource(cfg, tl, assets)
   const filename = suggestedFilename(cfg)

@@ -131,14 +131,26 @@ export function parseScript(srcRaw: string): ScriptEntry[] {
       const arg = sp === -1 ? '' : line.slice(sp + 1).trim()
       const args = arg.split(/\s+/).filter(Boolean)
       switch (cmd) {
-        case 'wait': out.push({ type: 'wait', timing, sec: parseFloat(args[0]) || 1 }); break
-        case 'speed': out.push({ type: 'speed', timing, mult: parseFloat(args[0]) || 1 }); break
+        case 'wait': {
+          const sec = parseFloat(args[0])
+          out.push({ type: 'wait', timing, sec: Number.isFinite(sec) ? Math.max(0, Math.min(3600, sec)) : 1 })
+          break
+        }
+        case 'speed': {
+          // clamped: 0 / negative would stall the metronome, huge values explode the message count
+          const mult = parseFloat(args[0])
+          out.push({ type: 'speed', timing, mult: Number.isFinite(mult) ? Math.max(0.05, Math.min(20, mult)) : 1 })
+          break
+        }
         case 'sub': case 'resub': {
           const [msgless, message] = arg.split(/\s+--\s+/)
           const a = msgless.split(/\s+/).filter(Boolean)
           const user = a[0]
-          const tier = parseTier(a[1]) ?? (cmd === 'sub' ? 1 : 1)
-          const months = parseInt(a[2] ?? (cmd === 'resub' ? '6' : '1'), 10) || 1
+          // "!sub user 12" (no tier) and "!sub user t2 12" both work
+          const tierGiven = parseTier(a[1]) !== undefined
+          const tier = parseTier(a[1]) ?? 1
+          const monthsArg = tierGiven ? a[2] : a[1]
+          const months = parseInt(monthsArg ?? (cmd === 'resub' ? '6' : '1'), 10) || 1
           out.push({ type: 'sub', timing, user: user === '*' ? undefined : user, tier, months, message })
           break
         }

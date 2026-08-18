@@ -80,7 +80,15 @@ export function usePlayer(durationMs: number) {
     setTState(0)
     setPlaying(true)
   }, [])
-  return { tRef, t: tState, playing, setPlaying, loop, setLoop, speed, setSpeed, seek, restart, subscribe }
+  /** play/pause; pressing play at the very end starts over */
+  const toggle = useCallback(() => {
+    if (!playing && tRef.current >= durationMs - 1) {
+      tRef.current = 0
+      setTState(0)
+    }
+    setPlaying(!playing)
+  }, [playing, durationMs])
+  return { tRef, t: tState, playing, setPlaying, toggle, loop, setLoop, speed, setSpeed, seek, restart, subscribe }
 }
 
 export type Player = ReturnType<typeof usePlayer>
@@ -89,6 +97,8 @@ export function Preview({ cfg, timeline, assets, player, zoom }: { cfg: Config; 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const renderer = useMemo(() => new ChatRenderer(assets), [assets])
+  // a new timeline re-uses message ids from 1: drop cached layouts
+  useEffect(() => renderer.invalidate(), [renderer, timeline])
   const style = useMemo(() => styleFromConfig(cfg), [cfg])
   const [fitScale, setFitScale] = useState(1)
   const dpr = Math.min(3, window.devicePixelRatio || 1)
@@ -107,7 +117,8 @@ export function Preview({ cfg, timeline, assets, player, zoom }: { cfg: Config; 
   }, [cfg.width, cfg.height])
   const zoomScale = zoom === 'fit' ? fitScale : zoom === 'auto' ? Math.min(1, fitScale) : zoom
 
-  // draw loop
+  // draw loop (depends on the player's stable refs, not the player object — that changes ~12×/s while playing)
+  const { tRef, subscribe } = player
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -120,7 +131,7 @@ export function Preview({ cfg, timeline, assets, player, zoom }: { cfg: Config; 
     let lastT = -1
     let lastAssets = -1
     const draw = () => {
-      const t = player.tRef.current
+      const t = tRef.current
       if (!dirty && t === lastT && assets.version === lastAssets) return
       dirty = false
       lastT = t
@@ -130,10 +141,10 @@ export function Preview({ cfg, timeline, assets, player, zoom }: { cfg: Config; 
       ctx.scale(pxScale, pxScale)
       renderer.render(ctx, timeline, t, { style, animation: cfg.animation, animationMs: cfg.animationMs, fadeTopEdge: cfg.fadeTopEdge, hiRes: pxScale > 1.25 })
     }
-    const unsub = player.subscribe(draw)
+    const unsub = subscribe(draw)
     draw()
     return unsub
-  }, [cfg, timeline, style, renderer, player, assets, dpr, zoomScale])
+  }, [cfg, timeline, style, renderer, tRef, subscribe, assets, dpr, zoomScale])
 
   const geo = computeGeometry(cfg)
   return (
@@ -150,6 +161,7 @@ export function Preview({ cfg, timeline, assets, player, zoom }: { cfg: Config; 
 
 export function Transport({ player, durationMs }: { player: Player; durationMs: number }) {
   const t = player.t
+  const wasPlaying = useRef(false)
   const fmt = (ms: number) => {
     const s = Math.floor(ms / 1000)
     const m = Math.floor(s / 60)
@@ -160,11 +172,26 @@ export function Transport({ player, durationMs }: { player: Player; durationMs: 
       <button type="button" className="icon" onClick={() => player.restart()} title="Restart">
         ⟲
       </button>
-      <button type="button" className="icon primary" onClick={() => player.setPlaying(!player.playing)} title={player.playing ? 'Pause' : 'Play'}>
+      <button type="button" className="icon primary" onClick={() => player.toggle()} title={player.playing ? 'Pause' : 'Play'}>
         {player.playing ? '❚❚' : '▶'}
       </button>
       <span className="time">{fmt(t)}</span>
-      <input type="range" min={0} max={durationMs} step={16} value={Math.min(t, durationMs)} onChange={(e) => player.seek(parseFloat(e.target.value))} onMouseDown={() => player.setPlaying(false)} />
+      <input
+        type="range"
+        min={0}
+        max={durationMs}
+        step={16}
+        value={Math.min(t, durationMs)}
+        aria-label="Seek"
+        onChange={(e) => player.seek(parseFloat(e.target.value))}
+        onPointerDown={() => {
+          wasPlaying.current = player.playing
+          player.setPlaying(false)
+        }}
+        onPointerUp={() => {
+          if (wasPlaying.current) player.setPlaying(true)
+        }}
+      />
       <span className="time">{fmt(durationMs)}</span>
       <select value={player.speed} onChange={(e) => player.setSpeed(parseFloat(e.target.value))} title="Preview speed">
         <option value={0.25}>0.25×</option>

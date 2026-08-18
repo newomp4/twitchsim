@@ -136,6 +136,7 @@ export function buildTimeline(inputs: SimInputs): Timeline {
     let cursor = cfg.startDelayMs
     let prev = cfg.startDelayMs
     let first = true
+    let waitMs = 0
     for (const e of entries) {
       if (e.type === 'user' || e.type === 'setuser') {
         // cast definitions don't take time
@@ -149,16 +150,23 @@ export function buildTimeline(inputs: SimInputs): Timeline {
             ? rng.exp(baseGapMs) * 0.85 + baseGapMs * 0.15
             : baseGapMs * Math.max(1, cfg.scriptGapMultiplier)
       if (e.type === 'wait') {
-        // "!wait N": the next line comes N seconds after the previous one
-        prev = prev + e.sec * 1000 - autoGap
+        // "!wait N": the next line comes exactly N seconds after the previous one (waits add up)
+        waitMs += e.sec * 1000
         first = false
         continue
       }
       let t: number
+      let explicitGap = 0 // a deliberate pause the metronome must keep
       if (e.timing.kind === 'at') t = e.timing.sec * 1000
-      else if (e.timing.kind === 'after') t = prev + e.timing.sec * 1000
-      else if (first) t = cursor
+      else if (e.timing.kind === 'after') {
+        t = prev + e.timing.sec * 1000
+        explicitGap = e.timing.sec * 1000
+      } else if (waitMs > 0) {
+        t = prev + waitMs
+        explicitGap = waitMs
+      } else if (first) t = cursor
       else t = prev + autoGap
+      waitMs = 0
       t = Math.max(0, t)
       first = false
       if (e.type === 'speed') {
@@ -167,6 +175,7 @@ export function buildTimeline(inputs: SimInputs): Timeline {
         continue
       }
       const produced = applyScriptEntry(ctx, e, t, messages, clears)
+      if (explicitGap > 0) for (const m of produced) if (m.t === t) m.minGapBefore = explicitGap
       prev = t
       // in metronomic mode multi-message events (bursts, gift bombs, raids) occupy consecutive slots
       if (cfg.pacing === 'even' && produced.length > 1) prev = Math.max(t, ...produced.map((m) => m.t))
@@ -184,7 +193,12 @@ export function buildTimeline(inputs: SimInputs): Timeline {
 
   // ---- 4) order, ids, deletions/clears -------------------------------------
   messages.sort((a, b) => a.t - b.t || a.id - b.id)
-  if (cfg.pacing === 'even') evenOut(messages, baseGapMs)
+  if (cfg.pacing === 'even') {
+    evenOut(messages, baseGapMs, speedChanges)
+    // the clear notices moved with the messages: re-derive the clear times from them
+    clears.length = 0
+    for (const m of messages) if (m.notice?.kind === 'clear') clears.push(m.t)
+  }
   if (cfg.pacing === 'even' && cfg.durationAuto && useScript && messages.length) {
     durationMs = Math.max(3000, messages[messages.length - 1].t + cfg.tailSec * 1000)
   }
@@ -206,7 +220,10 @@ function buildChatters(ctx: Ctx): void {
     let name = custom.length && (cfg.customNamesOnly || i < custom.length) ? custom[i % custom.length] : generateName(rng, cfg.localizedNamesRatio)
     let guard = 0
     while (usedLogins.has(name.login) && guard++ < 20) {
-      name = custom.length && cfg.customNamesOnly ? { login: name.login + rng.int(1, 999), displayName: name.displayName + rng.int(1, 999) } : generateName(rng, cfg.localizedNamesRatio)
+      if (custom.length && cfg.customNamesOnly) {
+        const suffix = rng.int(1, 999)
+        name = { login: name.login + suffix, displayName: name.displayName + suffix }
+      } else name = generateName(rng, cfg.localizedNamesRatio)
     }
     usedLogins.add(name.login)
     const c = newChatter(ctx, list.length, name.login, name.displayName, rng.weighted(PERSONAS, persWeights))
@@ -330,20 +347,25 @@ function applyFlags(ctx: Ctx, c: Chatter, f: UserFlags): void {
   }
   if (f.prime) c.isPrime = true
   if (f.color) c.color = f.color
+  // Rebuild only from what the chatter *already wore* plus what this flag set adds explicitly — the random
+  // badge pool may have withheld e.g. the Prime/sub badge even though the chatter "is" a sub.
+  const had = (set: string) => c.badges.some((b) => b.set === set)
+  const keep = (set: string) => c.badges.find((b) => b.set === set)!
   const badges: Badge[] = c.badges.filter((b) => !['broadcaster', 'moderator', 'vip', 'subscriber', 'founder', 'premium', 'turbo', 'partner', 'bits', 'sub-gifter'].includes(b.set))
-  if (c.isBroadcaster) badges.push(makeBadge('broadcaster', '1'))
-  else if (c.isMod) badges.push(makeBadge('moderator', '1'))
-  else if (c.isVip) badges.push(makeBadge('vip', '1'))
+  if (f.broadcaster || had('broadcaster')) badges.push(makeBadge('broadcaster', '1'))
+  else if (f.mod || had('moderator')) badges.push(makeBadge('moderator', '1'))
+  else if (f.vip || had('vip')) badges.push(makeBadge('vip', '1'))
   if (f.founder) badges.push(makeBadge('founder', '0'))
-  else if (c.subMonths > 0) badges.push(subBadgeFor(c.subMonths, ctx.badgeOpts))
-  else if (c.badges.some((b) => b.set === 'subscriber')) badges.push(c.badges.find((b) => b.set === 'subscriber')!)
+  else if (f.subMonths !== undefined) badges.push(subBadgeFor(c.subMonths, ctx.badgeOpts))
+  else if (had('founder')) badges.push(keep('founder'))
+  else if (had('subscriber')) badges.push(keep('subscriber'))
   if (f.bits) badges.push(makeBadge('bits', bitsBadgeVersion(f.bits)))
-  else if (c.badges.some((b) => b.set === 'bits')) badges.push(c.badges.find((b) => b.set === 'bits')!)
+  else if (had('bits')) badges.push(keep('bits'))
   if (f.gifter) badges.push(makeBadge('sub-gifter', gifterBadgeVersion(f.gifter)))
-  else if (c.badges.some((b) => b.set === 'sub-gifter')) badges.push(c.badges.find((b) => b.set === 'sub-gifter')!)
-  if (c.isPrime) badges.push(makeBadge('premium', '1'))
-  else if (f.turbo || c.badges.some((b) => b.set === 'turbo')) badges.push(makeBadge('turbo', '1'))
-  if (f.partner || c.badges.some((b) => b.set === 'partner')) badges.push(makeBadge('partner', '1'))
+  else if (had('sub-gifter')) badges.push(keep('sub-gifter'))
+  if (f.prime || had('premium')) badges.push(makeBadge('premium', '1'))
+  else if (f.turbo || had('turbo')) badges.push(makeBadge('turbo', '1'))
+  if (f.partner || had('partner')) badges.push(makeBadge('partner', '1'))
   c.badges = sortBadges(badges)
 }
 
@@ -541,7 +563,11 @@ function makeMessage(ctx: Ctx, t: number, user: Chatter | undefined, text: strin
     t,
     user,
     fragments: parsed.fragments,
-    text,
+    // Twitch caps messages at 500 characters (also keeps pathological words from stalling the layout)
+    text: text.length > 500 ? text.slice(0, 500) : text,
+    // badges / color as they are *now*: later !mod / !sub / gift notices must not restyle older rows
+    badges: user?.badges,
+    color: user ? user.color : undefined,
     ...extra,
   }
   if (parsed.bits) msg.bits = parsed.bits
@@ -694,6 +720,7 @@ function applyScriptEntry(ctx: Ctx, e: ScriptEntry, t: number, out: ChatMessage[
       break
     }
     case 'timeout': {
+      if (!e.user) break // "!timeout" without a user would delete a random chatter's lines
       const user = resolveUser(ctx, e.user)
       for (const m of out) if (m.user === user && !m.notice && m.t <= t && !m.deletedAt) m.deletedAt = t
       break
@@ -1057,8 +1084,9 @@ function spawnRaid(ctx: Ctx, t: number, count: number, out: ChatMessage[], raidi
  * Metronomic pacing: re-times messages so consecutive ones are exactly `gap` apart (in order),
  * keeping deliberate pauses (gaps much longer than the interval, e.g. !wait) and the pre-fill region.
  */
-function evenOut(messages: ChatMessage[], gap: number): void {
+function evenOut(messages: ChatMessage[], gap: number, speedChanges: { t: number; mult: number }[]): void {
   if (!messages.length) return
+  // deletions are re-timed relative to their message (same distance after it as before)
   const shift = (m: ChatMessage, newT: number) => {
     const d = newT - m.t
     if (m.deletedAt !== undefined) m.deletedAt += d
@@ -1074,9 +1102,11 @@ function evenOut(messages: ChatMessage[], gap: number): void {
     for (let i = 1; i < after.length; i++) {
       const orig = after[i].t
       const origGap = orig - prevOrig
-      // preserve intentional long pauses (waits, explicit far-apart timings)
-      const extra = origGap > gap * 2.5 ? origGap - gap : 0
-      const newT = prevNew + gap + extra
+      // "!speed" still applies to the metronome
+      const step = gap / speedAt(speedChanges, prevNew)
+      // explicit pauses (!wait, +N) are kept exactly; other far-apart timings (@N) at least keep their distance
+      const wanted = Math.max(step, after[i].minGapBefore ?? 0, origGap > step * 2.5 && !after[i].minGapBefore ? origGap : 0)
+      const newT = prevNew + wanted
       prevOrig = orig
       shift(after[i], newT)
       prevNew = newT

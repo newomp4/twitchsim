@@ -22,7 +22,7 @@ export function ExportPanel({ cfg, set, patch, timeline, assets }: { cfg: Config
   const [streamToDisk, setStreamToDisk] = useState(canPickFiles())
   const abortRef = useRef<AbortController | null>(null)
   const geo = computeGeometry(cfg)
-  const fmt = FORMATS.find((f) => f.value === cfg.exportFormat)!
+  const fmt = FORMATS.find((f) => f.value === cfg.exportFormat) ?? FORMATS[0]
   const frames = Math.round((timeline.durationMs / 1000) * cfg.exportFps)
   const running = !!progress && progress.phase !== 'done' && progress.phase !== 'error' && progress.phase !== 'cancelled'
   const megapixels = (geo.outW * geo.outH) / 1e6
@@ -113,7 +113,7 @@ export function ExportPanel({ cfg, set, patch, timeline, assets }: { cfg: Config
         )}
         <Row>
           <Select label="Frame rate" value={String(cfg.exportFps)} onChange={(v) => set('exportFps', parseInt(v, 10))} options={[{ value: '24', label: '24 fps' }, { value: '25', label: '25 fps' }, { value: '30', label: '30 fps' }, { value: '50', label: '50 fps' }, { value: '60', label: '60 fps' }]} />
-          <Slider label="Duration (s)" value={cfg.durationSec} min={1} max={600} onChange={(v) => patch({ durationSec: v, durationAuto: false })} format={(v) => `${v}s`} hint={cfg.durationAuto ? 'auto (from script) — moving this switches to fixed' : ''} />
+          <Slider label="Duration (s)" value={cfg.durationAuto ? Math.round(timeline.durationMs / 100) / 10 : cfg.durationSec} min={1} max={600} onChange={(v) => patch({ durationSec: v, durationAuto: false })} format={(v) => (cfg.durationAuto ? `${v}s (auto)` : `${v}s`)} hint={cfg.durationAuto ? 'ends right after your last line — moving this switches to a fixed length' : ''} />
         </Row>
         <p className="hint">
           Output: <b>{geo.outW}×{geo.outH}</b> · chat {geo.chatW}×{geo.chatH} at ({geo.chatX},{geo.chatY}) · <b>{frames} frames</b> ({(timeline.durationMs / 1000).toFixed(1)}s @ {cfg.exportFps}fps){megapixels > 8 && cfg.exportFormat === 'mov-prores' ? ' · ProRes at this size is slow (wasm) — expect a few fps' : ''}

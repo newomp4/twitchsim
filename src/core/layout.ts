@@ -266,9 +266,17 @@ export function flow(atoms: Atom[], maxWidth: number, minAbove: number, minBelow
     if (atom.kind === 'text') {
       let rest = atom.text
       while (rest.length) {
-        let n = rest.length
-        // find the largest prefix that fits
-        while (n > 1 && measure(rest.slice(0, n), atom.style.font) > maxWidth - x) n--
+        // largest prefix that fits (binary search; never cut a surrogate pair / emoji in half)
+        const avail = maxWidth - x
+        let lo = 1
+        let hi = rest.length
+        while (lo < hi) {
+          const mid = (lo + hi + 1) >> 1
+          if (measure(rest.slice(0, mid), atom.style.font) <= avail) lo = mid
+          else hi = mid - 1
+        }
+        let n = lo
+        if (n < rest.length && /[\uD800-\uDBFF]/.test(rest[n - 1])) n = Math.max(1, n - 1)
         const piece = rest.slice(0, n)
         place({ ...atom, text: piece, w: measure(piece, atom.style.font) })
         rest = rest.slice(n)
@@ -366,10 +374,30 @@ export function layoutMessage(msg: ChatMessage, env: LayoutEnv, tNow: number, in
     const atoms: Atom[] = [iconAtom, { kind: 'gap', w: 4 }]
     atoms.push(...noticePartsToAtoms(n.parts, fs, lh, fm, style, c))
     const innerW = contentW - 4 // 4px bar
-    const headerLines = flow(atoms, innerW, textAbove(lh, fm), textBelow(lh, fm))
-    // wrapped notice lines are indented past the icon (text sits in its own column)
+    // the text sits in its own column right of the icon: flow it at that width, then indent the wrapped lines
     const iconIndent = atomWidth(iconAtom) + 4
-    for (let i = 1; i < headerLines.length; i++) for (const p of headerLines[i].placed) p.x += iconIndent
+    const headerLines = flow(atoms, innerW, textAbove(lh, fm), textBelow(lh, fm))
+    if (headerLines.length > 1) {
+      // re-flow the text part alone at the narrower column width, then put the icon back on line 0
+      const textLines = flow(atoms.slice(2), innerW - iconIndent, textAbove(lh, fm), textBelow(lh, fm))
+      for (const l of textLines) for (const p of l.placed) p.x += iconIndent
+      textLines[0].placed.unshift({ atom: iconAtom, x: 0 })
+      const iconAbove = 'above' in iconAtom ? iconAtom.above : 0
+      const iconBelow = 'below' in iconAtom ? iconAtom.below : 0
+      if (iconAbove > textLines[0].baseline || iconBelow > textLines[0].height - textLines[0].baseline) {
+        const above = Math.max(textLines[0].baseline, iconAbove)
+        const below = Math.max(textLines[0].height - textLines[0].baseline, iconBelow)
+        textLines[0].baseline = above
+        textLines[0].height = above + below
+        let y = 0
+        for (const l of textLines) {
+          l.y = y
+          y += l.height
+        }
+      }
+      headerLines.length = 0
+      headerLines.push(...textLines)
+    }
     const headerH = headerLines.reduce((s, l) => s + l.height, 0)
     const blocks: Block[] = [{ y: 4 + style.padY, height: headerH, lines: headerLines, x: 4 + style.padX }]
     let y = 4 + style.padY + headerH
@@ -528,7 +556,8 @@ function chatLineAtoms(msg: ChatMessage, env: LayoutEnv, fm: FontMetrics, delete
   const below = textBelow(lh, fm)
   const atoms: Atom[] = []
   const user = msg.user!
-  const color = nameColor(user.login, user.color, style)
+  const color = nameColor(user.login, msg.color !== undefined ? msg.color : user.color, style)
+  const userBadges = msg.badges ?? user.badges
   const scale = fs / 14
 
   if (style.timestamps) {
@@ -541,7 +570,7 @@ function chatLineAtoms(msg: ChatMessage, env: LayoutEnv, fm: FontMetrics, delete
   const group: Atom[] = []
   if (style.showBadges) {
     const bsz = 18 * scale
-    for (const b of user.badges) {
+    for (const b of userBadges) {
       const override = style.badgeOverrides[b.set]
       const url = override ?? badgeUrl(b, 1) ?? fallbackBadgeUrl(b.set)
       const urlHi = override ?? badgeUrl(b, 4) ?? fallbackBadgeUrl(b.set)

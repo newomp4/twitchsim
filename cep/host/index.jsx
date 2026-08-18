@@ -1,14 +1,14 @@
 /*
- * TwitchSim — After Effects host script (ExtendScript / ES3).
+ * TwitchSim - After Effects host script (ExtendScript / ES3).
  * The panel (client/) computes everything (layout, keyframes, image files) and hands this
  * script a scene JSON; this script only turns it into comps, layers and keyframes.
  *
  * Entry points (called by the panel through CSInterface.evalScript):
- *   TWITCHSIM.info()          → JSON with AE / project info
- *   TWITCHSIM.begin(argsJson) → loads the scene, prepares folder/comp, imports footage
- *   TWITCHSIM.step(argsJson)  → builds a batch of message precomps
- *   TWITCHSIM.finish()        → keyframes on the scroll null, mattes, re-parenting, opens the comp
- *   TWITCHSIM.remove(argsJson)→ deletes a build (folder + comps) from the project
+ *   TWITCHSIM.info()          -> JSON with AE / project info
+ *   TWITCHSIM.begin(argsJson) -> loads the scene, prepares folder/comp, imports footage
+ *   TWITCHSIM.step(argsJson)  -> builds a batch of message precomps
+ *   TWITCHSIM.finish()        -> keyframes on the scroll null, mattes, re-parenting, opens the comp
+ *   TWITCHSIM.remove(argsJson)-> deletes a build (folder + comps) from the project
  */
 
 /* eslint-disable */
@@ -124,7 +124,7 @@ $.global.TWITCHSIM = (function () {
     } catch (e) {}
     return true; // can't tell on old versions; assume it is there
   }
-  /** → { ps: postScriptName, faux: use fauxItalic } */
+  /** -> { ps: postScriptName, faux: use fauxItalic } */
   function resolveFont(family, weight, italic) {
     var key = family + '|' + weight + '|' + (italic ? 1 : 0);
     if (fontCache[key]) return fontCache[key];
@@ -209,6 +209,25 @@ $.global.TWITCHSIM = (function () {
     }
     return null;
   }
+  function findCompByComment(comment) {
+    var items = app.project.items;
+    for (var i = 1; i <= items.length; i++) {
+      var it = items[i];
+      if (it instanceof CompItem && it.comment === comment) return it;
+    }
+    return null;
+  }
+  function removeTaggedItems(comment) {
+    var items = app.project.items;
+    for (var i = items.length; i >= 1; i--) {
+      var it = items[i];
+      if (it && it.comment === comment) {
+        try {
+          it.remove();
+        } catch (e) {}
+      }
+    }
+  }
   function findCompInFolder(folder, comment) {
     for (var i = 1; i <= folder.numItems; i++) {
       var it = folder.item(i);
@@ -292,6 +311,7 @@ $.global.TWITCHSIM = (function () {
    */
   function styleTemplate(spec, textOpts) {
     var font = resolveFont(spec.family, spec.weight, spec.italic);
+    if (spec.noFx) textOpts = { shadow: false, strokeWidth: 0, shadowDist: textOpts.shadowDist, shadowSoft: textOpts.shadowSoft };
     var key = font.ps + '|' + (font.faux ? 1 : 0) + '|' + spec.size + '|' + spec.color.join(',') + '|' + textOpts.strokeWidth + '|' + (textOpts.shadow ? 1 : 0);
     var tl = st.templates[key];
     if (tl) return tl;
@@ -548,19 +568,25 @@ $.global.TWITCHSIM = (function () {
     try {
       var key = TAG + ':' + data.buildKey;
       var root = findFolderByComment(key);
-      var main = null;
+      // the main comp may have been moved anywhere in the project: find it by its tag, not by folder
+      var main = findCompByComment(TAG + '-main:' + data.buildKey);
+      if (main) {
+        st.foreign = collectForeign(main);
+        for (var i = main.numLayers; i >= 1; i--) if (isOurs(main.layer(i))) main.layer(i).remove();
+      }
       if (root) {
-        main = findCompInFolder(root, TAG + '-main:' + data.buildKey);
-        if (main) {
-          st.foreign = collectForeign(main);
-          for (var i = main.numLayers; i >= 1; i--) if (isOurs(main.layer(i))) main.layer(i).remove();
+        // only OUR items go (comment tag); anything the user dropped into the folder stays
+        for (var j = root.numItems; j >= 1; j--) {
+          var it = root.item(j);
+          if (it !== main && isOurs(it)) removeItemDeep(it);
         }
-        for (var j = root.numItems; j >= 1; j--) if (root.item(j) !== main) removeItemDeep(root.item(j));
       } else {
-        root = app.project.items.addFolder('TwitchSim · ' + data.compName);
+        root = app.project.items.addFolder('TwitchSim \u00b7 ' + data.compName);
         root.comment = key;
       }
-      root.name = 'TwitchSim · ' + data.compName;
+      root.name = 'TwitchSim \u00b7 ' + data.compName;
+      // matte solids from earlier builds live in the Solids folder
+      removeTaggedItems(TAG + '-solid:' + data.buildKey);
       var dur = Math.max(1 / data.fps, data.durationSec);
       if (!main) {
         main = app.project.items.addComp(data.compName, data.frame.w, data.frame.h, 1, dur, data.fps);
@@ -586,12 +612,13 @@ $.global.TWITCHSIM = (function () {
         var name = as.id;
         st.assetMeta[as.id] = as;
         if (as.kind === 'sequence') {
-          var loops = (dur * data.fps) / Math.max(1, as.frames) + 1;
+          var seqFps = as.fps || data.fps;
+          var loops = dur / (Math.max(1, as.frames) / seqFps) + 1;
           st.footage[as.id] = importSequence(folder + '/' + as.file + '/f_00000.png', name, st.footFolder, as.fps || data.fps, loops);
         } else st.footage[as.id] = importStill(folder + '/' + as.file, name, st.footFolder);
       }
 
-      // structure layers (created bottom → top)
+      // structure layers (created bottom -> top)
       var anchor = main.layers.addNull(dur);
       anchor.name = 'TwitchSim Anchor';
       anchor.comment = TAG + '-anchor';
@@ -615,19 +642,26 @@ $.global.TWITCHSIM = (function () {
       tf(scroll).property('ADBE Position').setValue([0, 0]);
       st.scroll = scroll;
 
-      if (data.fadeTop > 0 && aeVersion() >= 23) {
-        var matte = main.layers.addSolid([1, 1, 1], 'Top fade matte', data.chat.w, data.chat.h, 1, dur);
+      // The canvas clips everything to the chat rectangle; in AE a shared luma matte does the same
+      // (rows sliding out at the top / in at the bottom stay inside), plus the optional top fade.
+      if (aeVersion() >= 23) {
+        var matte = main.layers.addSolid([1, 1, 1], data.fadeTop > 0 ? 'Chat area + top fade (matte)' : 'Chat area (matte)', data.chat.w, data.chat.h, 1, dur);
         matte.comment = TAG + '-matte';
+        try {
+          matte.source.comment = TAG + '-solid:' + data.buildKey;
+        } catch (e) {}
         matte.parent = anchor;
         tf(matte).property('ADBE Anchor Point').setValue([0, 0]);
         tf(matte).property('ADBE Position').setValue([0, 0]);
-        try {
-          var ramp = matte.property('ADBE Effect Parade').addProperty('ADBE Ramp');
-          ramp.property('ADBE Ramp-0001').setValue([data.chat.w / 2, 0]);
-          ramp.property('ADBE Ramp-0002').setValue([0, 0, 0, 1]);
-          ramp.property('ADBE Ramp-0003').setValue([data.chat.w / 2, data.fadeTop]);
-          ramp.property('ADBE Ramp-0004').setValue([1, 1, 1, 1]);
-        } catch (e) {}
+        if (data.fadeTop > 0) {
+          try {
+            var ramp = matte.property('ADBE Effect Parade').addProperty('ADBE Ramp');
+            ramp.property('ADBE Ramp-0001').setValue([data.chat.w / 2, 0]);
+            ramp.property('ADBE Ramp-0002').setValue([0, 0, 0, 1]);
+            ramp.property('ADBE Ramp-0003').setValue([data.chat.w / 2, data.fadeTop]);
+            ramp.property('ADBE Ramp-0004').setValue([1, 1, 1, 1]);
+          } catch (e) {}
+        }
         st.matte = matte;
       }
     } finally {

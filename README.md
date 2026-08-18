@@ -103,7 +103,7 @@ npm run cep:install     # builds the panel and installs it into Adobe's CEP exte
 # npm run cep:link      # same, but symlinks the repo's cep/ folder (rebuild → reopen the panel to see changes)
 ```
 
-Then (re)start After Effects (2022 or newer) → **Window ▸ Extensions ▸ TwitchSim**. The panel is the normal TwitchSim UI (same
+Then (re)start After Effects (2024 or newer) → **Window ▸ Extensions ▸ TwitchSim**. The panel is the normal TwitchSim UI (same
 Chat / Style tabs, live preview) plus an **After Effects** tab with **Build in After Effects**.
 
 What gets built:

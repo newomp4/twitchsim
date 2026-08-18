@@ -15,8 +15,9 @@ import type { Config } from '../core/types'
 import type { Timeline } from '../core/simulation'
 import type { AssetCache } from '../core/assets'
 import { frameAt } from '../core/assets'
-import { styleFromConfig, layoutMessage, fontMetrics, type RowLayout, type Atom, type TextStyle, type LineBox, type RenderStyle } from '../core/layout'
+import { styleFromConfig, layoutMessage, fontMetrics, measure, type RowLayout, type Atom, type TextStyle, type LineBox, type RenderStyle } from '../core/layout'
 import { computeGeometry } from '../export/exporter'
+import { drawEffect } from '../core/renderer'
 
 // ---------------------------------------------------------------------------
 // Output types (kept JSON-friendly and ES3-friendly for the host script)
@@ -39,7 +40,7 @@ export type RGB = [number, number, number]
 
 export type MsgLayer =
   | { type: 'rect'; name: string; x: number; y: number; w: number; h: number; radius: number; color: RGB; opacity: number; state?: 'normal' | 'deleted' }
-  | { type: 'text'; name: string; text: string; x: number; y: number; family: string; weight: number; italic: boolean; size: number; color: RGB; opacity: number; underline?: number; state?: 'normal' | 'deleted' }
+  | { type: 'text'; name: string; text: string; x: number; y: number; family: string; weight: number; italic: boolean; size: number; color: RGB; opacity: number; underline?: number; /** skip stroke/shadow (pill text) */ noFx?: boolean; state?: 'normal' | 'deleted' }
   | { type: 'image'; name: string; asset: string; cx: number; cy: number; w: number; h: number; opacity: number; state?: 'normal' | 'deleted' }
 
 export interface SceneMessage {
@@ -217,7 +218,7 @@ class AssetWriter {
       const total = img.totalMs!
       const n = Math.min(150, Math.max(2, Math.round((total / 1000) * this.fps)))
       const seqFps = n / (total / 1000)
-      const folder = `seq/${id}`
+      const folder = `seq/${id}-${n}f` // frame count in the name: a rebuild at another fps must not pick up stale files
       for (let j = 0; j < n; j++) {
         const src = frameAt(img, (j / seqFps) * 1000 + 0.01)
         const { c, ctx } = this.canvas(w, h)
@@ -238,6 +239,19 @@ class AssetWriter {
     }
     this.byKey.set(key, id)
     return { id, w, h }
+  }
+
+  /** power-up message effect background (rainbow eclipse / simmer / cosmic abyss) → one still PNG at build scale */
+  effect(kind: NonNullable<RowLayout['effect']>, w: number, h: number, s: number, tMs: number, msgId: number): { id: string; w: number; h: number } {
+    const id = `effect-${kind}-${msgId}`
+    const pw = Math.max(1, Math.round(w * s))
+    const ph = Math.max(1, Math.round(h * s))
+    const { c, ctx } = this.canvas(pw, ph)
+    ctx.scale(s, s)
+    drawEffect(ctx, kind, 0, 0, w, h, tMs)
+    this.files.push({ path: `img/${id}.png`, base64: this.toBase64(c) })
+    this.assets.push({ id, file: `img/${id}.png`, kind: 'still', w: pw, h: ph })
+    return { id, w: pw, h: ph }
   }
 
   /** SVG-path icon (reply arrow, gift, crown…) → PNG at 4x */
@@ -295,7 +309,7 @@ function flatten(line: LineBox): { atom: Atom; x: number }[] {
   return out
 }
 
-function emitRow(L: RowLayout, ctx: RowCtx, state?: 'normal' | 'deleted'): MsgLayer[] {
+function emitRow(L: RowLayout, ctx: RowCtx, state?: 'normal' | 'deleted', effectT = 0): MsgLayer[] {
   const { s, writer, W } = ctx
   const out: MsgLayer[] = []
   const contentY = L.marginTop
@@ -303,6 +317,11 @@ function emitRow(L: RowLayout, ctx: RowCtx, state?: 'normal' | 'deleted'): MsgLa
   const push = (l: MsgLayer) => {
     if (state) l.state = state
     out.push(l)
+  }
+  if (L.effect) {
+    // power-up effect: a still of the canvas' animated background at the message's arrival time
+    const a = writer.effect(L.effect, W, contentH, s, effectT, L.msgId)
+    push({ type: 'image', name: `effect ${L.effect}`, asset: a.id, cx: r3((W / 2) * s), cy: r3((contentY + contentH / 2) * s), w: r3(W * s), h: r3(contentH * s), opacity: 100 })
   }
   if (L.bg) {
     const c = parseColor(L.bg)
@@ -345,14 +364,21 @@ function emitRow(L: RowLayout, ctx: RowCtx, state?: 'normal' | 'deleted'): MsgLa
       const emitRun = (r: Run) => {
         const f = parseFont(r.style.font)
         const c = parseColor(r.style.color)
+        // AE point text swallows leading spaces: drop them and move the layer right by their width instead
+        const lead = r.text.match(/^\s+/)?.[0] ?? ''
+        if (lead) {
+          r = { ...r, text: r.text.slice(lead.length), x: r.x + measure(lead, r.style.font), w: r.w - measure(lead, r.style.font) }
+          if (!r.text) return
+        }
         let tx = r.x
         if (r.style.bg) {
           const fm = fontMetrics(f.size, f.family)
           const bg = parseColor(r.style.bg.color)
-          push({ type: 'rect', name: 'mention pill', x: r3(r.x * s), y: r3((baseline - fm.asc - r.style.bg.padY) * s), w: r3(r.w * s), h: r3((fm.asc + fm.desc + r.style.bg.padY * 2) * s), radius: r3(r.style.bg.radius * s), color: bg.rgb, opacity: r3(bg.a * 100) })
+          push({ type: 'rect', name: 'mention pill', x: r3((x0 + r.x) * s), y: r3((baseline - fm.asc - r.style.bg.padY) * s), w: r3(r.w * s), h: r3((fm.asc + fm.desc + r.style.bg.padY * 2) * s), radius: r3(r.style.bg.radius * s), color: bg.rgb, opacity: r3(bg.a * 100) })
           tx = r.x + r.style.bg.padX
         }
         const layer: MsgLayer = { type: 'text', name: r.text.length > 28 ? r.text.slice(0, 27) + '…' : r.text, text: r.text, x: r3((x0 + tx) * s), y: r3(baseline * s), family: f.family, weight: f.weight, italic: !!f.italic || !!r.style.italic, size: r3(f.size * s), color: c.rgb, opacity: r3(c.a * 100 * (r.style.alpha ?? 1)) }
+        if (r.style.bg) layer.noFx = true // the canvas draws no outline/shadow on pill text
         if (r.style.underline) layer.underline = r3((r.w - (r.style.bg ? r.style.bg.padX * 2 : 0)) * s)
         push(layer)
       }
@@ -523,6 +549,7 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
     if (t[k] >= 0 && t[k] <= durationSec) times.add(rt(t[k]))
     if (gdur > 0 && t[k] + gdur > 0 && t[k] + gdur <= durationSec) times.add(rt(t[k] + gdur))
   }
+  times.add(rt(durationSec)) // rows arriving in the last animation still push up until the end
   const holdBefore = new Set<number>()
   const jumps = [...clears, ...del.filter((d) => d !== Infinity)]
   for (const c of jumps) {
@@ -570,6 +597,8 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
     const m = msgs[i]
     const L = layouts[i]
     const inT = Math.max(0, t[i])
+    if (inT >= durationSec) continue // generated past the end of the comp: never visible
+    if (hiddenAt[i] <= inT) continue // wiped by a /clear before it could ever show
     const hMax = Math.max(h[i], layoutsDel[i]?.height ?? 0)
     // out point: first key time where the row is fully above the top edge, or the clear that hides it
     let outT = Math.min(durationSec, hiddenAt[i])
@@ -589,25 +618,60 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
     let deletedAtRel: number | undefined
     if (layoutsDel[i]) {
       deletedAtRel = r3(del[i] - layerStart)
-      layers = [...emitRow(L, rowCtx, 'normal'), ...emitRow(layoutsDel[i]!, rowCtx, 'deleted')]
-    } else layers = emitRow(L, rowCtx)
+      layers = [...emitRow(L, rowCtx, 'normal', m.t), ...emitRow(layoutsDel[i]!, rowCtx, 'deleted', m.t)]
+    } else layers = emitRow(L, rowCtx, undefined, m.t)
     // entrance animation
     const anim: SceneMessage['anim'] = {}
-    // older rows that get deleted while this row is on screen change height → this row's local
-    // offset inside the scroll null jumps by the difference (hold keys)
+    // Local offset inside the scroll null. Static = C[i], except:
+    //  (a) older rows still growing in when this row arrives — the canvas stacks on their *allotted*
+    //      height, so this row starts higher and settles down as they finish (a cubic transient),
+    //  (b) older rows deleted while this row is on screen change height → hold-key jumps.
     {
-      const jumpsHere: { at: number; d: number }[] = []
+      const growing: number[] = [] // k < i whose entrance is still running at t_i
+      if (gdur > 0) for (let k = 0; k < i; k++) if (epoch[k] === epoch[i] && t[k] + gdur > t[i] && t[k] <= t[i] && hiddenAt[k] > t[i]) growing.push(k)
+      const jumps: { at: number; d: number }[] = []
       for (let k = 0; k < i; k++) {
         if (epoch[k] !== epoch[i] || del[k] === Infinity || !layoutsDel[k]) continue
-        if (del[k] > t[i] && del[k] < hiddenAt[i] && del[k] <= durationSec) jumpsHere.push({ at: del[k], d: layoutsDel[k]!.height - h[k] })
+        if (del[k] > t[i] && del[k] < hiddenAt[i] && del[k] <= durationSec) jumps.push({ at: del[k], d: layoutsDel[k]!.height - h[k] })
       }
-      if (jumpsHere.length) {
-        jumpsHere.sort((a, b) => a.at - b.at)
-        let v = C[i]
-        const ks: Key[] = [{ t: rt(inT), v: r3((v + h[i] / 2) * s), interp: 'hold' }]
-        for (const j of jumpsHere) {
-          v += j.d
-          ks.push({ t: rt(j.at), v: r3((v + h[i] / 2) * s), interp: 'hold' })
+      if (growing.length || jumps.length) {
+        // local y (row top, 1x px) at time tau, and its one-sided slope
+        const localAt = (tau: number) => {
+          let v = C[i]
+          for (const k of growing) v -= h[k] * (1 - growAt(grow, tau - t[k]))
+          for (const j of jumps) if (tau >= j.at) v += j.d
+          return v
+        }
+        const slopeAt = (tau: number, side: -1 | 1) => {
+          let v = 0
+          for (const k of growing) {
+            const age = tau - t[k]
+            if (side < 0 && (age <= 1e-9 || Math.abs(age - gdur) < 1e-9)) continue
+            v += h[k] * growSlope(grow, side < 0 ? Math.min(age, gdur - 1e-9) : age)
+          }
+          return v
+        }
+        const times = new Set<number>([rt(inT)])
+        for (const k of growing) if (t[k] + gdur > inT) times.add(rt(t[k] + gdur))
+        const holdAt = new Set<number>()
+        for (const j of jumps) {
+          times.add(rt(j.at))
+          const before = rt(Math.max(inT, j.at - frameDur))
+          times.add(before)
+          holdAt.add(before)
+        }
+        const ks: Key[] = []
+        const sorted = [...times].filter((x) => x <= durationSec).sort((a, b) => a - b)
+        for (const tau of sorted) {
+          const key: Key = { t: tau, v: r3((localAt(tau) + h[i] / 2) * s), interp }
+          if (interp === 'bezier') {
+            key.inSpeed = r3(slopeAt(tau, -1) * s)
+            key.outSpeed = r3(slopeAt(tau, 1) * s)
+            key.inInf = 33.333
+            key.outInf = 33.333
+          }
+          if (holdAt.has(tau)) key.holdOut = true
+          ks.push(key)
         }
         anim.y = ks
       }

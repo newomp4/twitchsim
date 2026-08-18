@@ -32,7 +32,22 @@ export class PngEncoderPool {
           this.pump()
         }
         w.onerror = () => {
-          /* worker broken: fall back below */
+          // worker could not load / crashed: stop using workers, finish queued jobs on the main thread
+          const queued = this.queue.splice(0)
+          for (const wk of this.workers) wk.terminate()
+          this.workers = []
+          this.busy = []
+          this.inflight = 0
+          const queuedIds = new Set(queued.map((q) => q.id))
+          for (const [id, p] of this.pending) {
+            // frames already posted to a worker had their pixels transferred away: those fail
+            if (!queuedIds.has(id)) p.reject(new Error('PNG worker failed'))
+          }
+          for (const q of queued) {
+            const p = this.pending.get(q.id)
+            if (p) p.resolve(encodePng(q.data, q.w, q.h, this.level as 6))
+          }
+          this.pending.clear()
         }
         this.workers.push(w)
         this.busy.push(false)

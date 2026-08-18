@@ -85,6 +85,12 @@ export interface ChatMessage {
   t: number
   /** the message body author (absent for pure system notices) */
   user?: Chatter
+  /** the author's badges at the time of the message (chatters can be promoted / subscribe later) */
+  badges?: Badge[]
+  /** the author's name color at the time of the message */
+  color?: string | null
+  /** metronomic pacing: keep at least this many ms between the previous message and this one (!wait, +N) */
+  minGapBefore?: number
   fragments: Fragment[]
   /** raw text (for accessibility / debugging) */
   text: string

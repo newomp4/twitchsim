@@ -14,23 +14,36 @@ export function Row({ children, className }: { children: ReactNode; className?: 
   return <div className={'row ' + (className ?? '')}>{children}</div>
 }
 
+/**
+ * Labelled group. Rendered as a <div>, not a <label>: a label's implicit target is its first
+ * labelable descendant, so wrapping button groups (Segmented, chips) in a label made clicking the
+ * caption press the first button.
+ */
 export function Field({ label, children, hint, inline }: { label: ReactNode; children: ReactNode; hint?: string; inline?: boolean }) {
   return (
-    <label className={'field' + (inline ? ' inline' : '')}>
+    <div className={'field' + (inline ? ' inline' : '')}>
       <span className="lbl">{label}</span>
       {children}
       {hint && <span className="fhint">{hint}</span>}
-    </label>
+    </div>
   )
 }
 
-export function Slider({ label, value, min, max, step = 1, onChange, format, hint }: { label: string; value: number; min: number; max: number; step?: number; onChange: (v: number) => void; format?: (v: number) => string; hint?: string }) {
+export function Slider({ label, value, min, max, step = 1, onChange, format, hint, log }: { label: string; value: number; min: number; max: number; step?: number; onChange: (v: number) => void; format?: (v: number) => string; hint?: string; /** logarithmic track: fine control at the low end (min must be > 0) */ log?: boolean }) {
+  // log sliders map an integer 0..1000 track position onto min..max exponentially
+  const toPos = (v: number) => (log ? Math.round((Math.log(Math.max(min, v) / min) / Math.log(max / min)) * 1000) : v)
+  const fromPos = (p: number) => {
+    if (!log) return p
+    const raw = min * Math.pow(max / min, p / 1000)
+    const snapped = Math.round(raw / step) * step
+    return Math.min(max, Math.max(min, snapped))
+  }
   return (
     <label className="field slider">
       <span className="lbl">
         {label} <b>{format ? format(value) : value}</b>
       </span>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(parseFloat(e.target.value))} />
+      <input type="range" min={log ? 0 : min} max={log ? 1000 : max} step={log ? 1 : step} value={toPos(value)} onChange={(e) => onChange(fromPos(parseFloat(e.target.value)))} />
       {hint && <span className="fhint">{hint}</span>}
     </label>
   )
@@ -74,18 +87,27 @@ export function TextInput({ label, value, onChange, placeholder, hint }: { label
 }
 
 export function NumberInput({ label, value, onChange, min, max, step, hint }: { label: string; value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; hint?: string }) {
+  // keep what the user is typing (e.g. an empty field) until it becomes a valid number
+  const [text, setText] = useState<string | null>(null)
+  const clamp = (v: number) => Math.min(max ?? Infinity, Math.max(min ?? -Infinity, v))
   return (
     <label className="field">
       <span className="lbl">{label}</span>
       <input
         type="number"
-        value={Number.isFinite(value) ? value : ''}
+        value={text ?? (Number.isFinite(value) ? value : '')}
         min={min}
         max={max}
         step={step}
         onChange={(e) => {
+          setText(e.target.value)
           const v = parseFloat(e.target.value)
-          if (!Number.isNaN(v)) onChange(v)
+          if (!Number.isNaN(v) && v === clamp(v)) onChange(v)
+        }}
+        onBlur={() => {
+          const v = parseFloat(text ?? '')
+          if (!Number.isNaN(v)) onChange(clamp(v))
+          setText(null)
         }}
       />
       {hint && <span className="fhint">{hint}</span>}
@@ -109,7 +131,7 @@ export function Segmented<T extends string>({ value, options, onChange }: { valu
   return (
     <div className="seg">
       {options.map((o) => (
-        <button key={o.value} type="button" className={o.value === value ? 'on' : ''} title={o.title} onClick={() => onChange(o.value)}>
+        <button key={o.value} type="button" className={o.value === value ? 'on' : ''} title={o.title} aria-pressed={o.value === value} onClick={() => onChange(o.value)}>
           {o.label}
         </button>
       ))}

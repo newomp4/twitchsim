@@ -65,11 +65,11 @@ export function StylePanel({
       <Section title="Size">
         <Row>
           <Slider label="Height" value={cfg.height} min={60} max={2160} step={2} onChange={(v) => set('height', v)} format={(v) => `${v}px`} />
-          <NumberInput label="px" value={cfg.height} min={40} max={4000} onChange={(v) => set('height', Math.round(v))} />
+          <NumberInput label="exact px" value={cfg.height} min={40} max={4000} onChange={(v) => set('height', Math.round(v))} />
         </Row>
         <Row>
           <Slider label="Width" value={cfg.width} min={200} max={1200} step={2} onChange={(v) => set('width', v)} format={(v) => `${v}px`} hint="Twitch's column is 340px" />
-          <NumberInput label="px" value={cfg.width} min={120} max={3000} onChange={(v) => set('width', Math.round(v))} />
+          <NumberInput label="exact px" value={cfg.width} min={120} max={3000} onChange={(v) => set('width', Math.round(v))} />
         </Row>
         <p className="hint">These are Twitch-scale pixels; the export scale (Export tab) multiplies them, so 340×600 at 4× is a 1360×2400 sharp overlay.</p>
       </Section>

@@ -4,6 +4,7 @@ import { Output, MovOutputFormat, BufferTarget, StreamTarget, EncodedVideoPacket
 import type { CommonExportArgs, ExportResult } from './exporter'
 import { tick } from './exporter'
 import { PngEncoderPool } from './pngPool'
+import { guardedWritable } from './saveFile'
 
 const CORE_VERSION = '0.12.10'
 const CORE_BASES = [`https://cdn.jsdelivr.net/npm/@ffmpeg/core@${CORE_VERSION}/dist/esm`, `https://unpkg.com/@ffmpeg/core@${CORE_VERSION}/dist/esm`]
@@ -52,15 +53,22 @@ export async function exportProRes(a: CommonExportArgs): Promise<ExportResult> {
 
   let writable: FileSystemWritableFileStream | null = null
   if (fileHandle) writable = await fileHandle.createWritable()
-  const target = writable ? new StreamTarget(writable as unknown as WritableStream<{ type: 'write'; data: Uint8Array<ArrayBuffer>; position: number }>, { chunked: true }) : new BufferTarget()
+  const guarded = writable ? guardedWritable(writable) : null
+  const target = guarded ? new StreamTarget(guarded.stream as WritableStream<{ type: 'write'; data: Uint8Array<ArrayBuffer>; position: number }>, { chunked: true }) : new BufferTarget()
   const output = new Output({ format: new MovOutputFormat({ fastStart: writable ? false : 'in-memory' }), target })
+  // Cancel while ffmpeg is busy: kill the wasm worker (exec() cannot be interrupted otherwise)
+  const onAbort = () => {
+    ff.terminate()
+    ffmpegInstance = null
+  }
+  signal.addEventListener('abort', onAbort, { once: true })
   const packetSource = new EncodedVideoPacketSource('prores')
   output.addVideoTrack(packetSource, { frameRate: fps, maximumPacketCount: Math.ceil(total * 1.34) + 16 })
   await output.start()
 
-  // chunk size scales with resolution to keep wasm memory modest
+  // chunk size scales with resolution to keep wasm memory modest (~≤120 MB of raw RGBA per chunk)
   const pixels = source.geometry.outW * source.geometry.outH
-  const chunkFrames = Math.max(6, Math.min(48, Math.floor(6e7 / Math.max(1, pixels) * 4)))
+  const chunkFrames = Math.max(4, Math.min(48, Math.floor(1.2e8 / Math.max(1, pixels * 4))))
   let firstPacket = true
   const logs: string[] = []
   const pool = new PngEncoderPool(2, 3)
@@ -79,6 +87,8 @@ export async function exportProRes(a: CommonExportArgs): Promise<ExportResult> {
         source.render(i)
         jobs.push(pool.encode(source.canvas))
         onProgress({ phase: 'rendering', frame: i + 1, totalFrames: total, percent: ((i + 0.5) / total) * 100, message: `Rendering frame ${i + 1}/${total}` })
+        // keep only a few raw frames in flight (each is a full RGBA copy)
+        if (i - start >= pool.concurrency + 1) await jobs[i - start - pool.concurrency - 1]
         if ((i - start) % 2 === 0) await tick()
         if (signal.aborted) throw new DOMException('cancelled', 'AbortError')
       }
@@ -125,14 +135,29 @@ export async function exportProRes(a: CommonExportArgs): Promise<ExportResult> {
     const blob = new Blob([buf], { type: mime })
     return { blob, filename, mime, savedToDisk: false, bytes: blob.size }
   } catch (e) {
+    if (guarded) guarded.guard.ok = false // discard the partial file instead of committing it
     try {
       await output.cancel()
     } catch {
       /* ignore */
     }
+    if (!signal.aborted) {
+      // a failed exec leaves the wasm instance in an unknown state (mounted dirs, OOM): start fresh next time
+      try {
+        ff.terminate()
+      } catch {
+        /* ignore */
+      }
+      ffmpegInstance = null
+    }
     throw e
   } finally {
-    ff.off('log', onLog)
+    signal.removeEventListener('abort', onAbort)
+    try {
+      ff.off('log', onLog)
+    } catch {
+      /* terminated */
+    }
     pool.dispose()
   }
 }

@@ -6,7 +6,7 @@ import { collectAssetUrls } from '../core/renderer'
 import { styleFromConfig } from '../core/layout'
 import { ensureFonts } from '../core/fonts'
 import { compileScene, type SceneData } from './scene'
-import { callHost, mkdirp, writeBase64, writeText } from './cep'
+import { callHost, mkdirp, writeBase64, writeText, posixPath, jsonForES3 } from './cep'
 
 export type AEPhase = 'assets' | 'compile' | 'write' | 'prepare' | 'build' | 'finish' | 'done' | 'error'
 
@@ -77,7 +77,7 @@ export async function buildInAE(cfg: Config, timeline: Timeline, assets: AssetCa
   check()
 
   // files
-  const folder = opts.folder.replace(/\/+$/, '')
+  const folder = posixPath(opts.folder)
   mkdirp(folder)
   mkdirp(folder + '/img')
   const total = scene.files.length + 1
@@ -99,30 +99,33 @@ export async function buildInAE(cfg: Config, timeline: Timeline, assets: AssetCa
     }
   }
   const jsonPath = folder + '/scene.json'
-  writeText(jsonPath, JSON.stringify(scene.data))
+  writeText(jsonPath, jsonForES3(scene.data))
   onProgress({ phase: 'write', done: total, total, message: `Wrote ${total} files` })
 
   // host
   onProgress({ phase: 'prepare', done: 0, total: 1, message: 'Importing footage into After Effects…' })
   await yieldUI()
   const begun = await callHost<{ total: number; assets: number }>('begin', { jsonPath, folder })
-  check()
-  const batch = Math.max(1, opts.batch ?? 8)
-  let done = 0
-  while (done < begun.total) {
-    const r = await callHost<{ done: number; total: number }>('step', { count: batch })
-    done = r.done
-    onProgress({ phase: 'build', done, total: begun.total, message: `Building messages… ${done}/${begun.total}` })
-    await yieldUI()
-    if (opts.signal?.aborted) {
-      // finish anyway so the project is left in a consistent state
-      await callHost('finish')
-      throw new DOMException('Cancelled', 'AbortError')
+  // from here on the project is being modified: whatever happens, run finish() so it is left consistent
+  let fin: { compName: string; layers: number; messages: number; reattached: number; folder: string }
+  try {
+    check()
+    const batch = Math.max(1, opts.batch ?? 8)
+    let done = 0
+    while (done < begun.total) {
+      const r = await callHost<{ done: number; total: number }>('step', { count: batch })
+      done = r.done
+      onProgress({ phase: 'build', done, total: begun.total, message: `Building messages… ${done}/${begun.total}` })
+      await yieldUI()
+      check()
     }
+    onProgress({ phase: 'finish', done: begun.total, total: begun.total, message: 'Keyframing the scroll…' })
+    await yieldUI()
+    fin = await callHost<typeof fin>('finish')
+  } catch (e) {
+    await callHost('finish').catch(() => undefined)
+    throw e
   }
-  onProgress({ phase: 'finish', done: begun.total, total: begun.total, message: 'Keyframing the scroll…' })
-  await yieldUI()
-  const fin = await callHost<{ compName: string; layers: number; messages: number; reattached: number; folder: string }>('finish')
   const seconds = (performance.now() - t0) / 1000
   onProgress({ phase: 'done', done: begun.total, total: begun.total, message: `Done in ${seconds.toFixed(1)} s` })
   return { ...fin, stats: scene.data.stats, files: total, seconds }
