@@ -1,0 +1,180 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { Config } from '../core/types'
+import type { Timeline } from '../core/simulation'
+import { ChatRenderer } from '../core/renderer'
+import type { AssetCache } from '../core/assets'
+import { styleFromConfig } from '../core/layout'
+import { computeGeometry } from '../export/exporter'
+
+export interface PlayerState {
+  t: number
+  playing: boolean
+  loop: boolean
+  speed: number
+}
+
+export function usePlayer(durationMs: number) {
+  const [playing, setPlaying] = useState(true)
+  const [loop, setLoop] = useState(true)
+  const [speed, setSpeed] = useState(1)
+  const tRef = useRef(0)
+  const [tState, setTState] = useState(0)
+  const lastFrame = useRef<number | null>(null)
+  const listeners = useRef(new Set<() => void>())
+  const subscribe = useCallback((fn: () => void) => {
+    listeners.current.add(fn)
+    return () => {
+      listeners.current.delete(fn)
+    }
+  }, [])
+  useEffect(() => {
+    let raf = 0
+    let uiAcc = 0
+    const onVis = () => {
+      if (document.visibilityState !== 'hidden') {
+        cancelAnimationFrame(raf)
+        raf = requestAnimationFrame(step)
+      }
+    }
+    document.addEventListener('visibilitychange', onVis)
+    const step = (now: number) => {
+      if (document.visibilityState !== 'hidden') raf = requestAnimationFrame(step)
+      if (lastFrame.current === null) lastFrame.current = now
+      const dt = now - lastFrame.current
+      lastFrame.current = now
+      if (playing) {
+        let t = tRef.current + dt * speed
+        if (t >= durationMs) {
+          if (loop) t = t % Math.max(1, durationMs)
+          else {
+            t = durationMs
+            setPlaying(false)
+          }
+        }
+        tRef.current = t
+        uiAcc += dt
+        if (uiAcc > 80) {
+          uiAcc = 0
+          setTState(t)
+        }
+      }
+      for (const l of listeners.current) l()
+    }
+    raf = requestAnimationFrame(step)
+    // rAF is paused in hidden tabs; keep time flowing (at a low rate) with a timer fallback
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'hidden') step(performance.now())
+    }, 100)
+    return () => {
+      cancelAnimationFrame(raf)
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVis)
+    }
+  }, [playing, loop, speed, durationMs])
+  const seek = useCallback((t: number) => {
+    tRef.current = Math.max(0, Math.min(durationMs, t))
+    setTState(tRef.current)
+  }, [durationMs])
+  const restart = useCallback(() => {
+    tRef.current = 0
+    setTState(0)
+    setPlaying(true)
+  }, [])
+  return { tRef, t: tState, playing, setPlaying, loop, setLoop, speed, setSpeed, seek, restart, subscribe }
+}
+
+export type Player = ReturnType<typeof usePlayer>
+
+export function Preview({ cfg, timeline, assets, player, zoom }: { cfg: Config; timeline: Timeline; assets: AssetCache; player: Player; zoom: number | 'fit' }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const renderer = useMemo(() => new ChatRenderer(assets), [assets])
+  const style = useMemo(() => styleFromConfig(cfg), [cfg])
+  const [fitScale, setFitScale] = useState(1)
+  const dpr = Math.min(3, window.devicePixelRatio || 1)
+
+  // fit-to-container zoom
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => {
+      const r = el.getBoundingClientRect()
+      const s = Math.min((r.width - 32) / cfg.width, (r.height - 32) / cfg.height)
+      setFitScale(Math.max(0.1, Math.min(4, s)))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [cfg.width, cfg.height])
+  const zoomScale = zoom === 'fit' ? fitScale : zoom
+
+  // draw loop
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const pxScale = dpr * Math.min(2, Math.max(1, zoomScale))
+    canvas.width = Math.round(cfg.width * pxScale)
+    canvas.height = Math.round(cfg.height * pxScale)
+    const ctx = canvas.getContext('2d', { alpha: true })!
+    let dirty = true
+    let lastT = -1
+    let lastAssets = -1
+    const draw = () => {
+      const t = player.tRef.current
+      if (!dirty && t === lastT && assets.version === lastAssets) return
+      dirty = false
+      lastT = t
+      lastAssets = assets.version
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      ctx.scale(pxScale, pxScale)
+      renderer.render(ctx, timeline, t, { style, animation: cfg.animation, animationMs: cfg.animationMs, fadeTopEdge: cfg.fadeTopEdge, hiRes: pxScale > 1.25 })
+    }
+    const unsub = player.subscribe(draw)
+    draw()
+    return unsub
+  }, [cfg, timeline, style, renderer, player, assets, dpr, zoomScale])
+
+  const geo = computeGeometry(cfg)
+  return (
+    <div className="preview-wrap" ref={wrapRef}>
+      <div className={'preview-stage' + (style.transparent ? ' checker' : '')} style={{ width: cfg.width * zoomScale, height: cfg.height * zoomScale }}>
+        <canvas ref={canvasRef} style={{ width: cfg.width * zoomScale, height: cfg.height * zoomScale }} />
+      </div>
+      <div className="preview-meta">
+        {cfg.width}×{cfg.height} px chat · export {geo.outW}×{geo.outH} @ {cfg.exportFps}fps · {timeline.messages.length} messages · {(timeline.durationMs / 1000).toFixed(1)}s
+      </div>
+    </div>
+  )
+}
+
+export function Transport({ player, durationMs }: { player: Player; durationMs: number }) {
+  const t = player.t
+  const fmt = (ms: number) => {
+    const s = Math.floor(ms / 1000)
+    const m = Math.floor(s / 60)
+    return `${m}:${String(s % 60).padStart(2, '0')}.${String(Math.floor((ms % 1000) / 100))}`
+  }
+  return (
+    <div className="transport">
+      <button type="button" className="icon" onClick={() => player.restart()} title="Restart">
+        ⟲
+      </button>
+      <button type="button" className="icon primary" onClick={() => player.setPlaying(!player.playing)} title={player.playing ? 'Pause' : 'Play'}>
+        {player.playing ? '❚❚' : '▶'}
+      </button>
+      <span className="time">{fmt(t)}</span>
+      <input type="range" min={0} max={durationMs} step={16} value={Math.min(t, durationMs)} onChange={(e) => player.seek(parseFloat(e.target.value))} onMouseDown={() => player.setPlaying(false)} />
+      <span className="time">{fmt(durationMs)}</span>
+      <select value={player.speed} onChange={(e) => player.setSpeed(parseFloat(e.target.value))} title="Preview speed">
+        <option value={0.25}>0.25×</option>
+        <option value={0.5}>0.5×</option>
+        <option value={1}>1×</option>
+        <option value={2}>2×</option>
+        <option value={4}>4×</option>
+      </select>
+      <label className="loopbtn" title="Loop">
+        <input type="checkbox" checked={player.loop} onChange={(e) => player.setLoop(e.target.checked)} /> loop
+      </label>
+    </div>
+  )
+}

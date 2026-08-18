@@ -1,0 +1,467 @@
+/**
+ * Ambient chat corpus. Placeholders:
+ *   {e}          random emote from the registry (popularity weighted)
+ *   {e:cat}      emote from a reaction category (laugh, hype, sad, scared, cringe, clap, love, jam, wave, bye, think, stare, fail)
+ *   {streamer}   streamer display name        {game}   game name
+ *   {user}       another chatter (@mention)   {n}      small number      {big}  big number
+ */
+export interface PhrasePool {
+  weight: number
+  lines: string[]
+}
+
+export const GENERIC: Record<string, PhrasePool> = {
+  greet: {
+    weight: 6,
+    lines: [
+      'hi chat', 'hey chat {e:wave}', 'hello everyone', 'hi {streamer}!', 'yo', 'yoo', 'sup chat', 'hey {streamer} {e:wave}',
+      'good morning chat', 'gm', 'gm chat {e:wave}', 'evening all', 'hey guys', 'HeyGuys', 'hi', 'heyyy', 'wsg chat',
+      'just got here what did i miss', 'just tuned in, hows it going', 'im here {e:wave}', 'finally home, hi chat', 'peepoHey',
+      'hi from germany', 'hello from brazil', 'watching from the uk', 'hi from australia its 4am here', 'greetings from poland',
+      'first time here, this is nice', 'new here hi', 'hi chat how are we', 'omg im on time for once',
+    ],
+  },
+  bye: {
+    weight: 2,
+    lines: [
+      'gotta go, bye chat {e:bye}', 'gn chat', 'goodnight everyone', 'ok im heading out, gl {streamer}', 'bye {e:bye}', 'peepoLeave',
+      'gtg have a good one', 'later chat', 'im off to sleep, cya', 'work tomorrow, bye all', 'see u next stream {e:bye}',
+    ],
+  },
+  question: {
+    weight: 6,
+    lines: [
+      'what game is this', 'how long has stream been up', 'is this live?', 'what happened', 'wait what', 'why', 'how',
+      'what did i miss', 'whats the plan today', 'is {streamer} ok', 'anyone know the song', 'when is the next stream',
+      'what rank is he', 'is this ranked', 'whats his kd', 'is he playing with viewers', 'viewer games later?', 'discord link?',
+      'whats the discord', 'is there a vod', 'can someone clip that', 'why is chat like this', 'is that a new pc?',
+      'what mouse do you use', 'what sens', 'what dpi', 'what headset is that', 'whats the setup', 'how do i get that emote',
+      'why is everyone spamming', 'what does {e} mean', 'wait he did what', 'did he just', 'is that allowed', 'is that a bug',
+      'is he colorblind', 'why did he do that', 'is this a speedrun', 'whats the wr', 'how many hours', 'first playthrough?',
+      'is he gonna do the thing', 'are we doing the thing today', 'how much longer', 'is he streaming tomorrow', 'when merch',
+      'whats {streamer} favorite food', 'what time is it there', 'how many viewers', 'is this a sub only stream',
+    ],
+  },
+  filler: {
+    weight: 8,
+    lines: [
+      'lol', 'lmao', 'LMAO', 'true', 'facts', 'real', 'fr', 'ong', 'nah', 'no way', 'no shot', 'yep', 'yup', 'nope', 'ok', 'k',
+      'same', 'mood', 'this', 'based', 'W', 'L', 'ratio', 'huh', 'HUH', 'what', 'WHAT', 'bruh', 'BRUH', 'bro', 'sheesh',
+      'oof', 'yikes', 'rip', 'F', 'f', 'gg', 'ggs', 'ez', 'EZ', 'clip it', 'CLIP IT', 'clip', 'insane', 'crazy', 'wild',
+      'nice', 'sick', 'clean', 'smooth', 'cooked', 'cooking', 'hes cooking', 'we are so back', 'its over', 'its so over',
+      'we are back', 'chat', 'CHAT', 'chat is this real', 'is this real', 'no', 'NO', 'yes', 'YES', 'pls', 'please', 'plz',
+      'omg', 'OMG', 'wtf', 'brooo', 'ayo', 'AYO', 'hmm', 'sure', 'ok and', 'and?', 'cap', 'no cap', 'nocap', 'lowkey', 'highkey',
+      'lets go', 'LETS GO', 'LETSGOOO', 'here we go', 'HERE WE GO', 'oh no', 'oh no no no', 'uh oh', 'ez clap', 'clap',
+      'the goat', 'GOAT', 'hes him', 'HES HIM', 'him', 'she is her', 'W streamer', 'W chat', 'L chat', 'W stream', 'peak',
+      'peak stream', 'certified', 'classic', 'a classic', 'moment', 'iconic', 'legendary', 'cinema', 'CINEMA', 'movie',
+      'this is cinema', 'aura', '+1000 aura', '-1000 aura', 'aura farming', 'goated', 'washed', 'cracked', 'hes cracked',
+      'diff', 'gap', 'skill issue', 'skill diff', 'not even close', 'close one', 'so close', 'unlucky', 'unlucky man', 'lucky',
+      'rigged', 'scripted', 'staged', 'fake', 'real', 'so real', 'preach', 'say it louder', 'this guy gets it', 'valid', 'fair',
+      'noted', 'copium', 'hopium', 'pain', 'the pain', 'ouch', 'that hurt', 'i felt that', 'ok that was funny', 'lolol', 'xd', 'xD',
+      'hahaha', 'HAHAHA', 'im dead', 'im crying', 'im wheezing', 'stop', 'STOP', 'nooo', 'yesss', 'finally', 'FINALLY', 'about time',
+      'called it', 'told you', 'i knew it', 'as expected', 'expected', 'obviously', 'duh', 'ofc', 'of course', 'sadly', 'unfortunately',
+      'i cant', 'ICANT', 'i cant breathe', 'the way he', 'the way she', 'the timing', 'perfect timing', 'wow', 'woah', 'WOAH', 'jeez',
+      'holy', 'HOLY', 'holy moly', 'oh my', 'my god', 'oh lord', 'lord', 'help', 'HELP', 'send help', 'someone help him',
+    ],
+  },
+  emoteOnly: {
+    weight: 10,
+    lines: ['{e}', '{e}', '{e} {e}', '{e} {e} {e}', '{e}{e}{e}', '{e:laugh}', '{e:hype}', '{e:sad}', '{e:stare}', '{e:clap}', '{e} {e}', '{e:think}'],
+  },
+  emoteWord: {
+    weight: 8,
+    lines: [
+      'lol {e:laugh}', 'no way {e:hype}', 'what {e:stare}', 'bro {e:laugh}', 'omg {e:hype}', 'nooo {e:sad}', 'wait {e:think}',
+      'yes {e:hype}', 'ok {e:stare}', 'insane {e:hype}', 'ez {e:clap}', 'gg {e:clap}', 'oh no {e:scared}', 'yikes {e:cringe}',
+      'huh {e:stare}', 'true {e:clap}', 'W {e:hype}', 'L {e:laugh}', 'clip it {e:hype}', 'rip {e:sad}', 'F {e:sad}',
+      'HAHAHA {e:laugh}', 'nice {e:clap}', 'sheesh {e:hype}', 'ayo {e:stare}', 'chat {e:stare}', 'the {e:laugh}', 'this {e:laugh}',
+      'im crying {e:laugh}', 'again {e:laugh}', 'every time {e:laugh}', 'why {e:sad}', 'how {e:think}', 'me {e:sad}', 'same {e:sad}',
+      'vibes {e:jam}', 'tune {e:jam}', 'banger {e:jam}', 'dance {e:jam}', 'hi {e:wave}', 'bye {e:bye}', 'love this {e:love}',
+      'ily {e:love}', 'we love {streamer} {e:love}', 'cute {e:love}', 'aww {e:love}', 'monkaS', 'KEKW', 'OMEGALUL', 'Sadge',
+    ],
+  },
+  mention: {
+    weight: 3,
+    lines: [
+      '{user} lol', '{user} real', '{user} true', '{user} same', '{user} fr', '{user} what', '{user} no', '{user} yes', '{user} facts',
+      '{user} nah', '{user} thats not how it works', '{user} its a joke', '{user} relax', '{user} chill', '{user} L take',
+      '{user} W take', '{user} based', '{user} you good?', '{user} hi', '{user} welcome', '{user} hes joking', '{user} lmao',
+      '{user} {e:laugh}', '{user} {e:stare}', '{user} {e:clap}', '{user} its ranked', '{user} its casual', '{user} its a bit',
+      '{user} where', '{user} when', '{user} why', '{user} how do you know', '{user} source?', '{user} thank you',
+      '{user} agreed', '{user} disagree', '{user} idk man', '{user} maybe', '{user} probably', '{user} 100%', '{user} nope',
+    ],
+  },
+  commands: {
+    weight: 1.5,
+    lines: ['!drops', '!lurk', '!uptime', '!followage', '!socials', '!discord', '!commands', '!song', '!rank', '!schedule', '!prime', '!sr', '!points', '!watchtime', '!specs', '!sens', '!merch', '!clip'],
+  },
+  streamerTalk: {
+    weight: 4,
+    lines: [
+      '{streamer} you got this', '{streamer} pls', '{streamer} look at chat', 'read chat {streamer}', '{streamer} the mic', 'mic is fine',
+      '{streamer} drink water', 'hydrate {streamer}', '{streamer} we love you', '{streamer} is goated', '{streamer} is cracked',
+      '{streamer} is washed', '{streamer} what happened', '{streamer} explain', '{streamer} thoughts?', '{streamer} take a break',
+      '{streamer} play {game}', '{streamer} when {game}', '{streamer} do the thing', '{streamer} say hi to my friend', 'say hi {streamer}',
+      '{streamer} pls notice me', '{streamer} check dms', '{streamer} love the stream', '{streamer} u ok?', '{streamer} sleep',
+      '{streamer} you sound tired', '{streamer} the game is muted', '{streamer} game audio is low', '{streamer} lower the game volume',
+      '{streamer} turn up the game', '{streamer} your cam froze', 'cam froze', 'stream froze', 'is stream lagging', 'stream is lagging',
+      'lag', 'lagging', 'buffering', 'stream fine for me', 'fine for me', 'its your internet {user}', 'refresh', 'refresh {user}',
+      '{streamer} you froze', 'ok its back', 'we back', 'stream back', 'audio desync', 'the audio', 'audio is fine',
+    ],
+  },
+  bits: {
+    weight: 1,
+    lines: ['Cheer100 love the stream', 'Cheer50 {e:love}', 'cheer100 gg', 'Cheer500 you got this!', 'Cheer1000 for the goat', 'cheer10 lol', 'Cheer200 hydrate', 'Cheer100 W', 'Cheer300 clip that', 'Cheer5000 for {streamer} {e:hype}', 'cheer1 first cheer!', 'Cheer100 keep going', 'Cheer250 {e:jam}'],
+  },
+  pasta: {
+    weight: 0.6,
+    lines: [
+      'imagine being this good at the game while chatting with chat, absolutely unreal, only {streamer} could do this',
+      'CHAT IS THIS REAL?? CHAT IS THIS REAL?? CHAT IS THIS REAL??',
+      'this is the part where he clutches it and chat goes wild and then he says "ez" and everyone spams W',
+      'my grandma is watching this stream with me and she said {streamer} is a nice young man',
+      'i showed this stream to my cat and now the cat wont stop staring at the screen {e:stare}',
+      'reminder to sit up straight, drink water and unclench your jaw {e:love}',
+      'day {n} of asking {streamer} to play {game}',
+      'chat i just realized this stream has been up for {n} hours and i havent moved',
+      'my mom said i can stay up until {streamer} wins one more, so it will be a long night',
+      'this is my comfort stream, i put it on and everything is fine {e:love}',
+      'the amount of people who dont know how the game works is honestly impressive',
+      'i was here when {streamer} had {n} viewers, look at us now',
+      'ok whoever is spamming {e} you are actually so funny please keep going',
+      'i came for the gameplay i stayed for the chat',
+    ],
+  },
+  lurk: {
+    weight: 1,
+    lines: ['back to lurking', 'lurking {e:stare}', 'ok back to work, lurking', 'i lurk', 'gonna lurk, gl', 'lurk mode {e:stare}', 'chilling in the back'],
+  },
+  ratio: {
+    weight: 1,
+    lines: ['ratio', 'L + ratio', 'ratio + skill issue', 'W + ratio', 'ratio + no', 'ratio + cope', 'ratio {e:laugh}'],
+  },
+}
+
+export const MOODS: Record<string, Record<string, PhrasePool>> = {
+  hype: {
+    hype1: {
+      weight: 20,
+      lines: [
+        'LETS GOOOO', 'LETSGOOO', 'LETS GOOOOOOO', 'W', 'WWW', 'WWWWW', 'BIG W', 'HUGE W', 'HES CRACKED', 'HES CRACKED {e:hype}',
+        'INSANE', 'INSANE {e:hype}', 'NO WAY', 'NO WAYYY', 'NO SHOT', 'CLIP IT', 'CLIP THAT', 'CLIP CLIP CLIP', 'POGGERS', 'POG',
+        'POGCHAMP', 'HOLY', 'HOLY {e:hype}', 'OMG', 'OMGGG', 'HES HIM', 'HE IS HIM', 'THE GOAT', 'GOAT', 'GOATED', 'CRACKED',
+        'CINEMA', 'MOVIE', 'ABSOLUTE CINEMA', 'PEAK', 'PEAK CONTENT', 'HES SO GOOD', 'HOW', 'HOW???', 'HOW DID HE DO THAT',
+        'WHAT WAS THAT', 'WHAT', 'THAT WAS INSANE', 'THAT WAS NUTS', 'NUTS', 'UNREAL', 'ARE YOU KIDDING ME', 'ARE U SERIOUS',
+        'DIFF', 'GAP', 'EZ', 'EZ CLAP', 'GG', 'GGS', 'GG EZ', 'TOO EASY', 'DEMON', 'MONSTER', 'BEAST', 'HES A BEAST', 'MENACE',
+        '{e:hype} {e:hype} {e:hype}', '{e:hype}{e:hype}{e:hype}{e:hype}', 'W {e:hype}', 'LETSGO {e:hype}', 'YESSSS', 'YES YES YES',
+        'HYPEEE', 'HYPE', 'PogU', 'PogChamp PogChamp PogChamp', 'POGGERS POGGERS', 'catJAM', 'HYPERS', 'LETSGO', 'GOOOO', 'GO GO GO',
+        'HES ON FIRE', 'ON FIRE', 'HEATER', 'HES HEATING UP', 'HOT STREAK', 'STREAK', 'ANOTHER ONE', 'AGAIN', 'AGAIN??', 'ONE MORE',
+        'ONE MORE ONE MORE', 'RUN IT BACK', 'THIS IS IT', 'THIS IS THE ONE', 'I BELIEVE', 'WE BELIEVE', 'BELIEVE', 'DO IT', 'DO IT DO IT',
+        'chat is going crazy', 'CHAT IS GOING CRAZY', 'chat is wild rn', 'the hype is real', 'i love this stream', 'best stream ever',
+        'best streamer', 'W STREAMER', 'W STREAM', 'peak stream', 'im so hyped', 'my heart', 'MY HEART', 'im shaking', 'IM SHAKING',
+        'goosebumps', 'GOOSEBUMPS', 'chills', 'CHILLS', 'i cant believe it', 'IM SCREAMING', 'SCREAMING', 'we are so back', 'WE ARE SO BACK',
+      ],
+    },
+    hype2: { weight: 4, lines: ['{e:hype}', '{e:hype} {e:hype}', '{e:clap} {e:clap}', 'W W W', 'W {e:clap}', 'gg {e:clap}', 'ez {e:clap}', 'LETSGO {e:hype} {e:hype}'] },
+  },
+  chill: {
+    chill1: {
+      weight: 20,
+      lines: [
+        'this is so relaxing', 'comfy stream', 'comfy', 'cozy vibes', 'chill stream today', 'love these chill streams', 'the vibes are immaculate',
+        'just chilling', 'chilling', 'vibing', 'vibin', 'good vibes only', 'nice and calm', 'this is my favorite kind of stream',
+        'perfect background stream', 'watching while working', 'watching while cooking', 'watching while doing homework', 'watching from bed',
+        'watching on my phone', 'on my lunch break, hi', 'just woke up, hi chat', 'about to sleep, this is perfect', 'raining here, perfect stream',
+        'coffee and stream {e:love}', 'tea and stream', 'snack time', 'what are you eating today', 'what did you have for lunch',
+        'how was your day {streamer}', 'how is everyone doing today', 'im doing ok, tired', 'long day at work', 'finally weekend',
+        'monday tomorrow {e:sad}', 'friday {e:hype}', 'weekend vibes', 'take your time', 'no rush', 'no pressure', 'we chill',
+        'good music today', 'love this playlist', 'song is nice', 'what song is this', 'this song {e:jam}', 'vibes {e:jam}',
+        'the setup looks clean', 'nice lighting', 'the cam looks good today', 'new haircut?', 'looking fresh', 'the fit is clean',
+        'ok this is peaceful', 'peaceful', 'zen', 'therapy stream', 'this stream is therapy', 'needed this today', 'thanks for streaming',
+        'appreciate you {streamer}', 'love this community', 'chat is nice today', 'nice chat', 'wholesome chat', 'ok chat is cute',
+        'yawn', 'sleepy', 'im sleepy', 'gonna nap', 'nap time', 'brb food', 'brb', 'back', 'im back', 'ok back', 'what did i miss',
+        'story time?', 'tell us a story', 'talk about your day', 'any plans for the weekend', 'plans after stream?', 'whats for dinner',
+      ],
+    },
+    chill2: { weight: 3, lines: ['{e:love}', '{e:jam}', '{e:stare}', 'peepoSip', 'Sip', 'peepoHappy', 'FeelsOkayMan', 'FeelsGoodMan', 'Bedge', 'comfy {e:love}'] },
+  },
+  funny: {
+    funny1: {
+      weight: 20,
+      lines: [
+        'LMAOOO', 'LMAOOOO', 'LMFAO', 'HAHAHAHA', 'HAHAHAHAHA', 'im crying', 'IM CRYING', 'im dead', 'IM DEAD', 'im dying', 'im wheezing',
+        'i cant', 'I CANT', 'ICANT', 'STOP', 'STOP IT', 'bro', 'BRO', 'broooo', 'BROOOO', 'the way he said that', 'the way he looked',
+        'the delivery', 'the timing', 'PERFECT TIMING', 'timing', 'not the {e:laugh}', 'nahhh', 'NAHHH', 'nah man', 'no way he said that',
+        'he said it', 'HE SAID IT', 'why would you say that', 'you cant say that', 'thats crazy', 'thats wild', 'wild', 'unhinged',
+        'certified moment', 'certified classic', 'a classic', 'clip it', 'clip that', 'this is going in the compilation', 'compilation material',
+        'youtube clip', 'thats a tiktok', 'thats going viral', 'main character', 'npc behavior', 'npc moment', 'the npc', 'goofy',
+        'goofy ahh', 'silly', 'silly goose', 'clown', 'clown moment', 'clownery', 'the clown', 'circus', 'THE CIRCUS', 'send in the clowns',
+        'KEKW', 'KEKW KEKW', 'KEKW KEKW KEKW', 'OMEGALUL', 'OMEGALUL OMEGALUL', 'LULW', 'LUL', 'LUL LUL', 'PepeLaugh', 'KEKL', 'xdd',
+        'xdd xdd', 'lol', 'lol lol', 'lolol', 'lmao', 'lmao lmao', 'HA', 'HAH', 'HAHA', 'ha ha', 'lmaooo', 'im laughing so hard',
+        'my stomach hurts', 'i spit my drink', 'i choked', 'i snorted', 'my mom asked why im laughing', 'my roommate thinks im crazy',
+        'the {e:laugh}', 'this {e:laugh}', 'him {e:laugh}', 'chat {e:laugh}', 'again {e:laugh}', 'every time {e:laugh}', 'ok that was funny',
+        'ok that got me', 'that got me', 'good one', 'nice one', 'comedy', 'COMEDY', 'peak comedy', 'comedy gold', 'gold', 'GOLD',
+        'why is this so funny', 'why am i laughing', 'this shouldnt be funny', 'its not even funny but im laughing', 'help', 'HELP',
+        'the {e:laugh} {e:laugh}', 'BAHAHA', 'PFFT', 'pfff', 'bro thinks hes funny', 'he is actually funny', 'chat is funnier', 'chat W',
+      ],
+    },
+    funny2: { weight: 6, lines: ['{e:laugh}', '{e:laugh} {e:laugh}', '{e:laugh} {e:laugh} {e:laugh}', '{e:laugh}{e:laugh}{e:laugh}{e:laugh}', 'LOL {e:laugh}', 'LMAO {e:laugh}'] },
+  },
+  gaming: {
+    game1: {
+      weight: 20,
+      lines: [
+        'go left', 'go right', 'behind you', 'BEHIND YOU', 'look behind you', 'turn around', 'left left left', 'right side', 'top left',
+        'hes top', 'one top', 'one on the roof', 'roof', 'window', 'hes in the window', 'check the corner', 'corner', 'check corners',
+        'reload', 'RELOAD', 'why didnt you reload', 'heal', 'HEAL', 'heal up', 'use a med', 'buy armor', 'buy a helmet', 'no armor?',
+        'grab the loot', 'loot', 'take the loot', 'check the map', 'map', 'look at the map', 'zone', 'ZONE', 'zone is closing', 'rotate',
+        'rotate now', 'you need to rotate', 'push', 'PUSH', 'push him', 'dont push', 'why did you push', 'wait for team', 'stay with team',
+        'peek', 'dont peek', 'wide peek', 'jiggle', 'crouch', 'jump', 'slide', 'sprint', 'run', 'RUN', 'hide', 'camp', 'stop camping',
+        'aim', 'aim up', 'aim down', 'headshot', 'HEADSHOT', 'one tap', 'ONE TAP', 'flick', 'nice flick', 'nice shot', 'sick shot',
+        'missed', 'MISSED', 'how did you miss', 'he missed', 'whiff', 'WHIFF', 'whiffed', 'skill issue', 'aim diff', 'movement diff',
+        'macro diff', 'brain diff', 'iq diff', 'game sense', 'no game sense', 'positioning', 'bad position', 'good position', 'crosshair placement',
+        'crosshair', 'sens too high', 'sens too low', 'lower your sens', 'raise your sens', 'lag', 'server lag', 'desync', 'hitreg',
+        'that hit', 'that didnt hit', 'that was a hit', 'no reg', 'servers', 'ping', 'whats your ping', 'ping diff', '200 ping', 'lag switch',
+        'hacker', 'hes hacking', 'cheater', 'sus', 'thats sus', 'aimbot', 'walls', 'he has walls', 'report', 'report him', 'smurf',
+        'hes a smurf', 'smurf lobby', 'bot lobby', 'bots', 'bot', 'the bot', 'npc', 'this lobby', 'this team', 'random teammates',
+        'your team is trash', 'team diff', 'carry', 'CARRY', 'carried', 'you got carried', 'hard carry', 'clutch', 'CLUTCH', 'clutch it',
+        'clutch or kick', '1v3', '1v4', '1v5', 'ace', 'ACE', 'ace incoming', 'gg', 'ggs', 'gg go next', 'go next', 'next game', 'one more',
+        'one more game', 'requeue', 'queue', 'ranked?', 'play ranked', 'play casual', 'switch game', 'play {game}', 'when {game}',
+        '{game} stream when', 'this game is so good', 'this game is mid', 'this game is dead', 'game is dead', 'dead game', 'game is peak',
+        'best game', 'worst game', 'this update ruined it', 'new patch', 'patch notes', 'nerf', 'buff', 'op', 'thats op', 'broken', 'so broken',
+        'meta', 'off meta', 'that build', 'what build', 'build?', 'what loadout', 'loadout', 'what gun', 'use the other gun', 'switch weapons',
+        'save', 'SAVE', 'eco', 'force buy', 'full buy', 'plant', 'PLANT', 'defuse', 'DEFUSE', 'ninja', 'ninja defuse', 'kit', 'no kit',
+        'flash', 'FLASH', 'smoke', 'nade', 'grenade', 'molly', 'ult', 'ULT', 'use ult', 'ult now', 'why no ult', 'save ult', 'cooldown',
+        'cd', 'its on cooldown', 'no mana', 'mana', 'level up', 'lvl', 'what level', 'skill tree', 'upgrade', 'craft', 'inventory',
+        'inventory full', 'drop it', 'sell it', 'keep it', 'its rare', 'legendary drop', 'DROP', 'the drop', 'first try', 'FIRST TRY',
+        'second try', 'attempt {n}', 'attempt number {n}', 'try again', 'again', 'you got this', 'this run', 'THIS RUN', 'pb pace',
+        'wr pace', 'reset', 'RESET', 'dont reset', 'no reset', 'save the run', 'gold split', 'split', 'timer', 'time save', 'timeloss',
+        'boss', 'boss fight', 'the boss', 'phase 2', 'phase 3', 'dodge', 'DODGE', 'roll', 'ROLL', 'parry', 'PARRY', 'block', 'heal now',
+        'flask', 'estus', 'summon', 'no summons', 'git gud', 'skill issue tbh', 'you got this', 'so close', 'SO CLOSE', 'almost', 'ALMOST',
+      ],
+    },
+    game2: { weight: 4, lines: ['{e:fail}', '{e:hype}', '{e:scared}', 'monkaS', 'monkaW', 'PauseChamp', 'KEKW', 'Sadge', 'EZ Clap', 'gg {e:clap}'] },
+  },
+  wholesome: {
+    whole1: {
+      weight: 20,
+      lines: [
+        'you got this', 'YOU GOT THIS', 'we believe in you', 'proud of you', 'so proud of you', 'we love you {streamer}', 'we love you',
+        'love you {streamer}', 'ily', 'ily chat', 'love this community', 'best community', 'best chat', 'chat is so nice today', 'wholesome',
+        'this is so wholesome', 'my heart', 'aww', 'awww', 'aw', 'cute', 'so cute', 'adorable', 'precious', 'protect at all costs',
+        'thank you for streaming', 'thanks for the stream', 'thank you {streamer}', 'you make my day', 'you made my day', 'you make my week',
+        'this stream is my safe place', 'this is my happy place', 'i needed this', 'needed this today', 'thank you for being you',
+        'take care of yourself', 'take care', 'drink water', 'hydrate', 'HYDRATE', 'stretch', 'stretch break', 'posture check', 'sit up',
+        'unclench your jaw', 'take a breath', 'breathe', 'you deserve a break', 'rest well', 'sleep well', 'get some rest', 'youre doing great',
+        'youre doing amazing', 'youre amazing', 'youre the best', 'best streamer', 'youre so talented', 'talented', 'so talented', 'inspiring',
+        'you inspire me', 'you helped me through a rough time', 'this stream helped me', 'thank you for everything', 'appreciate you',
+        'appreciate this', 'grateful', 'im grateful for this community', 'good vibes', 'positive vibes', 'sending love', 'sending hugs',
+        'hugs', 'virtual hug', 'VirtualHug', 'peepoHug', 'dankHug', '<3', '<3 <3', '<3 <3 <3', 'peepoLove', 'catKISS', 'widepeepoHappy',
+        'happy to be here', 'glad im here', 'glad i found this stream', 'found this stream last week and im hooked', 'new follower here',
+        'just followed', 'just subbed', 'subbed!', 'happy to support', 'worth every penny', 'gifting soon', 'gifted subs incoming',
+        'have a great day everyone', 'have a good day chat', 'good luck everyone', 'be kind', 'be nice chat', 'love yall', 'love you all',
+        'you all are amazing', 'chat is amazing', 'mods are amazing', 'W mods', 'thank you mods', 'ty mods', 'thanks mods',
+      ],
+    },
+    whole2: { weight: 5, lines: ['{e:love}', '{e:love} {e:love}', '<3', '<3 {e:love}', 'peepoLove', 'catKISS', 'peepoHug', 'AYAYA', 'widepeepoHappy'] },
+  },
+  toxic: {
+    tox1: {
+      weight: 20,
+      lines: [
+        'washed', 'WASHED', 'hes washed', 'so washed', 'washed up', 'fell off', 'he fell off', 'fell off hard', 'trash', 'so bad', 'hes so bad',
+        'bad', 'BAD', 'terrible', 'awful', 'garbage', 'dogwater', 'water', 'bot', 'BOT', 'actual bot', 'npc', 'skill issue', 'SKILL ISSUE',
+        'skill issue lol', 'uninstall', 'UNINSTALL', 'delete the game', 'quit', 'just quit', 'give up', 'retire', 'RETIRE', 'hang it up',
+        'unsub', 'unsubbed', 'unfollowed', 'unfollow', 'boring', 'BORING', 'so boring', 'zzz', 'zzzz', 'ResidentSleeper', 'sleep stream',
+        'L', 'LLL', 'L stream', 'L streamer', 'L take', 'L chat', 'L gameplay', 'L play', 'ratio', 'RATIO', 'ratio + L', 'ratio + washed',
+        'ratio + skill issue', 'cope', 'COPE', 'copium', 'cope harder', 'seethe', 'mald', 'malding', 'MALDING', 'hes malding', 'tilted',
+        'hes tilted', 'so tilted', 'crying', 'hes crying', 'cry more', 'cry about it', 'sad', 'sad little man', 'embarrassing', 'EMBARRASSING',
+        'thats embarrassing', 'so embarrassing', 'cringe', 'CRINGE', 'so cringe', 'cringe stream', 'yikes', 'YIKES', 'oof', 'big oof',
+        'yawn', 'who asked', 'WHO ASKED', 'nobody asked', 'didnt ask', 'ok and', 'and?', 'so?', 'cool story', 'nobody cares', 'no one cares',
+        'we dont care', 'stop yapping', 'yapping', 'YAPPING', 'yap yap yap', 'the yap', 'get to the point', 'just play the game', 'PLAY THE GAME',
+        'play the game', 'stop talking and play', 'less talking', 'more gaming', 'this is a gaming stream?', 'is this a podcast', 'podcast stream',
+        'react andy', 'reacting again', 'another react stream', 'clickbait title', 'title is bait', 'bait', 'the bait', 'fake', 'FAKE', 'staged',
+        'scripted', 'so scripted', 'rigged', 'RIGGED', 'lucky', 'LUCKY', 'so lucky', 'pure luck', 'no skill', 'zero skill', 'carried', 'CARRIED',
+        'got carried', 'team carried him', 'his team is cracked hes not', 'imagine losing to that', 'imagine', 'IMAGINE', 'imagine being this bad',
+        'my grandma plays better', 'i could do better', 'i would have won that', 'even i can do that', 'thats it?', 'thats all?', 'mid', 'MID',
+        'so mid', 'mid stream', 'mid gameplay', 'mid take', 'wrong', 'WRONG', 'youre wrong', 'thats wrong', 'not true', 'lies', 'liar',
+        'cap', 'CAP', 'thats cap', 'huge cap', 'sure buddy', 'ok buddy', 'ok bro', 'sure', 'yeah right', 'doubt', 'DOUBT', 'x', 'X', 'press x',
+        'x to doubt', 'no', 'NO', 'nope', 'nah', 'clown', 'CLOWN', 'clown stream', 'circus', 'the circus is in town', 'goofy', 'goofy ahh streamer',
+        'muted', 'unmuted', 'why is chat in slow mode', 'slow mode?', 'sub only?', 'free the chat', 'FREE CHAT', 'mods asleep', 'mods?',
+        'MODS', 'mods do something', 'ban him', 'timeout', 'why am i timed out', 'unban me', 'im banned', 'ok im out', 'im leaving', 'bye',
+      ],
+    },
+    tox2: { weight: 5, lines: ['{e:cringe}', '{e:fail}', 'ResidentSleeper', 'Bedge', 'Weirdge', 'MODS', 'ICANT', 'OMEGALUL', 'KEKW', 'xdd', 'HUH', 'Clueless', 'ratio {e:laugh}'] },
+  },
+  reactions: {
+    react1: {
+      weight: 20,
+      lines: [
+        '{e:laugh}', '{e:laugh} {e:laugh}', '{e:hype}', '{e:hype} {e:hype}', '{e:sad}', '{e:scared}', '{e:stare}', '{e:clap}', '{e:cringe}',
+        '{e:think}', '{e:love}', '{e:jam}', '{e:fail}', '{e}', '{e} {e}', '{e}{e}{e}', '{e:laugh}{e:laugh}{e:laugh}', '{e:hype}{e:hype}',
+        'KEKW', 'OMEGALUL', 'LUL', 'PogChamp', 'POGGERS', 'monkaS', 'Sadge', 'PepeLaugh', 'ICANT', 'HUH', 'Bedge', 'Clueless', 'Aware',
+        'D:', 'D: D:', 'catJAM', 'Pog', 'PogU', 'EZ', 'Clap', 'peepoClap', 'WICKED', 'Okayge', 'Madge', 'Prayge', 'PauseChamp', 'xdd',
+        'W', 'L', 'lol', 'lmao', 'wow', 'omg', 'what', 'no', 'yes', 'nooo', 'yesss', 'oh', 'OH', 'ooh', 'ah', 'AH', 'oof', 'rip', 'F',
+      ],
+    },
+  },
+  clutch: {
+    clutch1: {
+      weight: 20,
+      lines: [
+        'CLUTCH', 'CLUTCHHH', 'CLUTCH IT', 'CLUTCH OR KICK', 'NO WAY', 'NO WAYYY', 'NO WAY NO WAY', 'OMG', 'OMG OMG OMG', 'OMGGGG', 'HES HIM',
+        'HE IS HIM', 'HIM', 'MOVIE', 'CINEMA', 'ABSOLUTE CINEMA', 'THIS IS CINEMA', '1v4???', '1V5', '1v3 pog', 'ONE MORE', 'ONE MORE KILL',
+        'LAST ONE', 'GET HIM', 'GET HIMMM', 'FINISH', 'FINISH HIM', 'KILL HIM', 'DO IT', 'DO IT DO IT DO IT', 'GO GO GO', 'GOOOO', 'RUN',
+        'HEAL', 'HEAL FIRST', 'RELOAD', 'PLANT', 'DEFUSE', 'DEFUSE IT', 'TIME', 'THE TIME', 'NO TIME', 'HURRY', 'HURRY UP', 'QUICK', 'FAST',
+        'CAREFUL', 'BEHIND YOU', 'BEHIND', 'LEFT', 'RIGHT', 'HES LEFT', 'HES RIGHT', 'HES CLOSE', 'CLOSE', 'SO CLOSE', 'ALMOST', 'ALMOST THERE',
+        'I CANT WATCH', 'I CANT LOOK', 'MY HEART', 'MY HEART CANT TAKE THIS', 'IM SHAKING', 'IM SWEATING', 'IM STRESSED', 'STRESS', 'THE STRESS',
+        'THIS IS INSANE', 'INSANE', 'HOLY', 'HOLY HOLY', 'HOLY MOLY', 'BRO', 'BROOO', 'BROOOOO', 'WHAT', 'WHAT IS HAPPENING', 'WHATTTT',
+        'ARE YOU KIDDING', 'YOU KIDDING ME', 'IS THIS REAL', 'CHAT IS THIS REAL', 'THIS IS REAL', 'ITS HAPPENING', 'IT IS HAPPENING', 'ITS OVER',
+        'HES DONE', 'ITS DONE', 'GG', 'GGGG', 'GG EZ', 'EZ', 'EZ CLAP', 'CLAP', 'LETSGOOO', 'LETS GOOO', 'YESSSSS', 'YESSS', 'YEEEES', 'WWWW',
+        'W W W', 'BIG W', 'HUGE', 'MASSIVE', 'ENORMOUS W', 'INSANE CLUTCH', 'BEST CLUTCH EVER', 'CLUTCH OF THE YEAR', 'CLIP THAT', 'CLIP IT NOW',
+        'CLIP CLIP CLIP', 'SOMEONE CLIP THAT', 'MODS CLIP', 'THAT WAS A MOVIE', 'THAT WAS INSANE', 'THAT WAS NUTS', 'THAT WAS CRAZY',
+        'HOW', 'HOW???', 'HOW DID HE', 'HOW IS THAT POSSIBLE', 'IMPOSSIBLE', 'NOT POSSIBLE', 'HACKS', 'HES HACKING (jk)', 'AIMBOT', 'DEMON',
+        'MONSTER', 'BEAST', 'MENACE', 'GOAT', 'THE GOAT', 'GOATED', 'CRACKED', 'CRACKED OUT OF HIS MIND', 'HES CRACKED', 'DIFF', 'GAP',
+        '{e:hype}', '{e:hype} {e:hype} {e:hype}', '{e:scared}', '{e:scared} {e:scared}', 'monkaS', 'monkaW', 'PauseChamp', 'PogChamp', 'POGGERS',
+        'HYPERS', 'LETSGO', 'Prayge', 'PRAYGE', 'PRAY', 'PRAYING', 'PLEASE', 'PLS', 'PLEASE PLEASE', 'COME ON', 'CMON', 'CMONNN', 'YOU GOT THIS',
+        'U GOT THIS', 'BELIEVE', 'I BELIEVE', 'WE BELIEVE', 'TRUST', 'IN HIM WE TRUST', 'HES GOT IT', 'HE HAS IT', 'THIS IS THE ONE', 'THIS RUN',
+      ],
+    },
+  },
+  music: {
+    music1: {
+      weight: 20,
+      lines: [
+        'banger', 'BANGER', 'absolute banger', 'this is a banger', 'TUNE', 'tune', 'what a tune', 'song name?', 'whats the song', 'song?', '!song',
+        'this song', 'this song {e:jam}', 'love this song', 'love this track', 'this track', 'track id?', 'id?', 'ID', 'ID PLS', 'name of the song',
+        'shazam says', 'its on spotify?', 'is this on spotify', 'playlist link?', 'playlist?', 'add to playlist', 'adding this to my playlist',
+        'vibing', 'vibin', 'VIBING', 'vibes', 'VIBES', 'immaculate vibes', 'the vibes', 'good vibes', 'catJAM', 'ratJAM', 'dogJAM', 'pepeJAM',
+        'PepoDance', 'peepoDance', 'Jammies', 'EDM', 'AlienPls', 'TriKool', 'PartyParrot', 'dance', 'DANCE', 'dancing', 'im dancing', 'we dancing',
+        'headbanging', 'nodding', 'nod', 'the drop', 'DROP', 'wait for the drop', 'HERE IT COMES', 'the drop is coming', 'DROP INCOMING', 'BASS',
+        'the bass', 'bass boosted', 'my speakers', 'my ears', 'volume up', 'turn it up', 'TURN IT UP', 'louder', 'LOUDER', 'quieter pls', 'too loud',
+        'a bit loud', 'perfect volume', 'chorus', 'the chorus', 'that transition', 'clean transition', 'nice mix', 'sick mix', 'mix is fire',
+        'set is fire', 'this set', 'best set', 'the set tonight', 'play {game} ost', 'play the ost', 'ost is peak', 'soundtrack', 'that soundtrack',
+        'lo-fi', 'lofi', 'lofi hip hop', 'jazz', 'jazzy', 'funky', 'groovy', 'GROOVY', 'the groove', 'this beat', 'beat is fire', 'fire', 'FIRE',
+        'heat', 'HEAT', 'straight heat', 'thats a hit', 'hit', 'certified hit', 'classic', 'a classic', 'oldie', 'throwback', 'nostalgic',
+        'nostalgia', 'takes me back', 'childhood', 'my childhood', 'i remember this', 'this brings back memories', 'memories', 'goosebumps',
+        'chills', 'CHILLS', 'i got chills', 'this part', 'THIS PART', 'wait for it', 'here we go', 'HERE WE GO', 'sing', 'SING', 'sing it',
+        'karaoke', 'karaoke stream', 'more karaoke', 'your voice', 'nice voice', 'good voice', 'you can sing?', 'he can sing', 'she can sing',
+        'lyrics?', 'the lyrics', 'lyrics are crazy', 'what did he say', 'that line', 'the line', 'bars', 'BARS', 'he spit', 'rap', 'freestyle',
+        'guitar', 'the guitar', 'guitar solo', 'SOLO', 'drums', 'the drums', 'piano', 'piano is beautiful', 'beautiful', 'so beautiful',
+        'gorgeous', 'stunning', 'this is art', 'art', 'ART', 'masterpiece', 'MASTERPIECE', 'chef kiss', 'perfection', 'perfect', 'PERFECT',
+        'encore', 'ENCORE', 'one more song', 'one more', 'again', 'replay', 'REPLAY', 'run it back', 'play it again', 'from the top', 'rewind',
+      ],
+    },
+    music2: { weight: 5, lines: ['{e:jam}', '{e:jam} {e:jam}', '{e:jam} {e:jam} {e:jam}', 'catJAM catJAM', 'ratJAM', 'PepoDance', 'vibes {e:jam}', 'TUNE {e:jam}'] },
+  },
+  irl: {
+    irl1: {
+      weight: 20,
+      lines: [
+        'where are you', 'where is this', 'what city is this', 'what country', 'is this {game}', 'is that a real place', 'i live near there',
+        'i was there last year', 'ive been there', 'looks nice', 'looks beautiful', 'beautiful', 'gorgeous view', 'the view', 'nice view',
+        'the weather looks nice', 'is it cold', 'is it hot', 'looks hot', 'looks cold', 'wear a jacket', 'jacket', 'sunscreen', 'hydrate',
+        'food looks fire', 'food looks good', 'that looks delicious', 'im hungry now', 'now im hungry', 'what did you order', 'whats that',
+        'what is that', 'try it', 'TRY IT', 'eat it', 'rate it', 'rating?', 'out of 10?', 'give it a rating', 'is it good', 'is it spicy',
+        'spicy?', 'looks spicy', 'looks sweet', 'is that expensive', 'how much was that', 'price?', 'how much', 'thats cheap', 'thats expensive',
+        'say hi to the camera', 'say hi', 'wave', 'wave to chat', 'ask them', 'ask him', 'ask her', 'talk to them', 'talk to him', 'be nice',
+        'the mic is cutting out', 'mic cutting', 'audio cutting', 'stream cutting out', 'stream is choppy', 'choppy', 'bitrate', 'BITRATE',
+        'the bitrate', 'bitrate dropped', 'bitrate is fine', 'switch to lte', 'switch to wifi', 'wifi', 'the wifi', 'bad signal', 'signal',
+        'no signal', 'we lost him', 'we lost the stream', 'stream back', 'welcome back', 'wb', 'we back', 'back online', 'ok we good',
+        'the cam is shaking', 'shaky cam', 'shaky', 'motion sickness', 'im getting dizzy', 'hold the cam still', 'gimbal', 'use the gimbal',
+        'turn the cam around', 'show the view', 'show us', 'show the food', 'show the menu', 'menu?', 'whats on the menu', 'pan left', 'pan right',
+        'look up', 'look at the sky', 'the sky', 'sunset', 'SUNSET', 'sunrise', 'clouds', 'birds', 'is that a dog', 'DOG', 'dog', 'DOGGO',
+        'pet the dog', 'PET THE DOG', 'cat', 'CAT', 'a cat', 'kitty', 'pet the cat', 'so cute', 'cute', 'aww', 'careful', 'CAREFUL', 'watch out',
+        'car', 'CAR', 'look both ways', 'crosswalk', 'red light', 'green light', 'walk', 'dont run', 'take your time', 'no rush', 'we chill',
+        'walking sim', 'walking simulator', 'walk and talk', 'walk stream', 'love these walks', 'walking with {streamer}', 'walk with us',
+        'how far', 'how many steps', 'steps?', 'step count', 'tired?', 'you tired', 'take a break', 'sit down', 'find a bench', 'bench',
+        'water break', 'drink water', 'coffee?', 'get a coffee', 'coffee', 'COFFEE', 'coffee time', 'boba', 'get boba', 'ice cream', 'ICE CREAM',
+        'buy it', 'BUY IT', 'dont buy it', 'buy me one', 'get one for chat', 'chat wants one', 'we want one', 'we want food', 'feed chat',
+        'people are staring', 'they are looking at you', 'that guy is looking', 'awkward', 'AWKWARD', 'thats awkward', 'run', 'RUN', 'go go go',
+        'lost?', 'are you lost', 'youre lost', 'use maps', 'google maps', 'gps', 'wrong way', 'other way', 'turn around', 'left', 'right',
+      ],
+    },
+    irl2: { weight: 4, lines: ['{e:stare}', '{e:love}', '{e:laugh}', 'monkaS', 'peepoHappy', 'FeelsGoodMan', 'KEKW', 'PogChamp'] },
+  },
+}
+
+/** Bot replies / announcements. {user} = the chatter who triggered it. */
+export const BOT_LINES = {
+  periodic: [
+    'Follow {streamer} on Twitter/X and join the Discord for updates! Type !socials',
+    'Enjoying the stream? Consider following to catch the next one! {e:love}',
+    'Want to support the stream? Type !prime to sub for free with Prime Gaming!',
+    'Be respectful in chat and follow the rules. Type !rules for more info.',
+    'Clips are welcome! Type !clip to create a clip of the last 30 seconds.',
+    'New here? Say hi and type !discord to join the community!',
+    'Reminder: no spoilers, no backseating unless asked. Thanks!',
+    'Drops are enabled! Type !drops for more info.',
+  ],
+  replies: {
+    '!drops': ['@{user} Drops are enabled for this stream! Watch to earn rewards.', '@{user} Drops: link your account at twitch.tv/drops/inventory'],
+    '!lurk': ['@{user} thanks for the lurk! Enjoy the stream {e:love}', '@{user} is now lurking. Have a good one!'],
+    '!uptime': ['@{user} the stream has been live for {n} hours and {n} minutes.', '@{user} {streamer} has been live for {n}h {n}m.'],
+    '!followage': ['@{user} has been following {streamer} for {n} months and {n} days.', '@{user} has been following for {n} years and {n} months.'],
+    '!socials': ['Follow {streamer} everywhere: twitter.com/{login} | youtube.com/@{login} | discord.gg/{login}'],
+    '!discord': ['Join the Discord: discord.gg/{login}'],
+    '!commands': ['@{user} commands: !discord !socials !drops !lurk !uptime !followage !song !rank !schedule !prime'],
+    '!song': ['@{user} No song is currently playing.', '@{user} Now playing: {song}'],
+    '!rank': ['@{user} {streamer} is currently ranked Diamond II', '@{user} current rank: Immortal 1', '@{user} rank: Grandmaster (top 500)'],
+    '!schedule': ['@{user} {streamer} streams Mon/Wed/Fri at 6pm EST and weekends at 2pm EST.'],
+    '!prime': ['@{user} You can sub for free every month with Prime Gaming: twitch.tv/prime'],
+    '!sr': ['@{user} Song requests are currently disabled.', '@{user} added to the queue!'],
+    '!points': ['@{user} has {big} points.', '@{user} you have {big} channel points'],
+    '!watchtime': ['@{user} has spent {n} days {n} hours watching {streamer}.'],
+    '!specs': ['@{user} PC: RTX 4090, i9-13900K, 64GB RAM. Full setup: !setup'],
+    '!sens': ['@{user} 800 DPI, 0.35 in-game', '@{user} sens: 400 dpi 1.2'],
+    '!merch': ['@{user} merch: {login}.shop', '@{user} Merch drop coming soon!'],
+    '!clip': ['@{user} clip created: clips.twitch.tv/{clip}'],
+  } as Record<string, string[]>,
+  songs: ['Lo-fi Beats - Study Mix', 'Daft Punk - One More Time', 'The Weeknd - Blinding Lights', 'C418 - Sweden', 'Kavinsky - Nightcall', 'Porter Robinson - Shelter', 'Toby Fox - MEGALOVANIA', 'Fred again.. - Delilah', 'Tame Impala - The Less I Know The Better', 'Kendrick Lamar - Not Like Us'],
+}
+
+/** Sub / resub custom messages. */
+export const SUB_MESSAGES = [
+  'love the stream', 'love you {streamer}', 'happy to support', 'worth it', 'best streamer', 'keep it up', 'proud sub', 'W streamer',
+  '{n} months lets go', 'still here', 'here for another month', 'first sub ever!', 'finally subbed', 'had to sub', 'prime sub go brr',
+  'free sub with prime, might as well', 'thanks for the content', 'thank you for the streams', 'you got this', 'lets gooo', 'POGGERS',
+  '{e:hype}', '{e:love}', '{e:hype} {e:hype}', 'ily', 'take my money', 'my favorite streamer', 'better than tv', 'never missing a stream',
+  'the emotes are worth it', 'for the emotes', 'love the community', 'best chat', 'sub for the goat', 'gg', 'W', 'hi mom', 'hi {streamer}',
+  '', '', '', '', '',
+]
+
+/** Templates for reaction "moments" (many chatters posting similar things at once). */
+export const MOMENTS: { cat: string; lines: string[]; weight: number }[] = [
+  { cat: 'laugh', weight: 10, lines: ['{e:laugh}', '{e:laugh} {e:laugh}', '{e:laugh} {e:laugh} {e:laugh}', 'LMAOOO', 'HAHAHA', 'LOL', 'im crying', 'IM DEAD', 'lmao', 'KEKW', 'OMEGALUL', 'ICANT', 'no way {e:laugh}', 'bro {e:laugh}', 'STOP {e:laugh}'] },
+  { cat: 'hype', weight: 10, lines: ['{e:hype}', '{e:hype} {e:hype}', 'LETS GOOO', 'LETSGOOO', 'W', 'WWW', 'POGGERS', 'NO WAY', 'INSANE', 'CLIP IT', 'HOLY', 'OMG', 'HES HIM', 'GOAT', 'YESSS', 'HYPE'] },
+  { cat: 'sad', weight: 4, lines: ['{e:sad}', '{e:sad} {e:sad}', 'Sadge', 'nooo', 'NOOO', 'rip', 'F', 'F in chat', 'pain', 'PAIN', 'oh no', 'unlucky', 'so close', 'D:'] },
+  { cat: 'scared', weight: 4, lines: ['{e:scared}', '{e:scared} {e:scared}', 'monkaS', 'monkaW', 'oh no', 'OH NO', 'careful', 'CAREFUL', 'behind you', 'RUN', 'run', 'D:', 'PauseChamp'] },
+  { cat: 'cringe', weight: 3, lines: ['{e:cringe}', 'yikes', 'YIKES', 'oof', 'Weirdge', 'MODS', 'ResidentSleeper', 'Bedge', 'HUH', 'huh', 'what', 'ok', 'awkward'] },
+  { cat: 'clap', weight: 5, lines: ['{e:clap}', '{e:clap} {e:clap}', 'gg', 'GG', 'ggs', 'ez', 'EZ', 'W', 'nice', 'clean', 'Clap', 'EZ Clap', 'well played', 'wp'] },
+  { cat: 'fail', weight: 6, lines: ['{e:fail}', 'LOL', 'KEKW', 'lmao', 'skill issue', 'L', 'NOOO', 'FailFish', 'how', 'HOW', 'again', 'AGAIN', 'bro', 'why', 'ICANT'] },
+  { cat: 'jam', weight: 3, lines: ['{e:jam}', '{e:jam} {e:jam}', 'catJAM', 'ratJAM', 'vibes', 'TUNE', 'banger', 'PepoDance', 'dance', 'DANCE'] },
+  { cat: 'wave', weight: 2, lines: ['{e:wave}', 'hi', 'HI', 'hello', 'HELLO', 'hey', 'HeyGuys', 'peepoHey', 'hi hi', 'wave', 'wsg'] },
+  { cat: 'stare', weight: 3, lines: ['{e:stare}', 'Stare', 'Aware', 'HUH', 'huh', 'wait', 'WAIT', 'what', 'WHAT', 'hold on', 'chat', 'CHAT', '?', '??', '???'] },
+  { cat: 'love', weight: 3, lines: ['{e:love}', '{e:love} {e:love}', '<3', 'aww', 'AWW', 'cute', 'so cute', 'wholesome', 'peepoLove', 'catKISS', 'ily'] },
+  { cat: 'spamword', weight: 5, lines: ['{spam}', '{spam}', '{spam}', '{spam} {spam}', '{spam}!', '{SPAM}', '{SPAM}', '{SPAM}!!'] },
+]
+
+export const SPAM_WORDS = ['W', 'L', 'CLIP IT', 'F', 'GG', 'EZ', 'RIGGED', 'DIFF', 'GOAT', 'HIM', 'CINEMA', 'MODS', 'RUN', 'PLANT', 'HEAL', 'RELOAD', 'AGAIN', 'ONE MORE', 'CHAT', 'REAL', 'FAKE', 'SCRIPTED', 'PEAK', 'AURA', 'COOKED', 'WASHED', 'YAP', 'LOCK IN', 'PLAY', 'JUMP', 'GO', 'NO', 'YES', 'BOO', 'ENCORE']
+
+/** First-time chatter messages. */
+export const FIRST_TIME_LINES = [
+  'first time chatting, love the stream', 'hi! first time here', 'been lurking for months, finally saying hi', 'new here, this is fun',
+  'first message ever lol', 'hello! long time viewer first time chatter', 'hi everyone', 'just found this stream, its great', 'hey! whats up',
+  'first time here, what game is this?', 'ok chat is fast', 'hi from {country}', 'this stream got recommended, staying', 'love this already',
+  'is it always this chaotic here', 'hi {streamer}!', 'wow this chat is fast', 'hello from a new fan', 'finally made an account to chat',
+]
+export const COUNTRIES = ['germany', 'brazil', 'the uk', 'canada', 'australia', 'france', 'spain', 'mexico', 'poland', 'the netherlands', 'sweden', 'italy', 'japan', 'korea', 'india', 'argentina', 'norway', 'finland', 'texas', 'california', 'new york', 'florida', 'ohio', 'ireland', 'portugal', 'turkey', 'philippines', 'chile', 'colombia', 'peru']
+
+/** Highlight-my-message style content (people pay points to say something). */
+export const HIGHLIGHT_LINES = [
+  '{streamer} can you say hi to my little brother, its his birthday', 'been watching since {n}k viewers, proud of you', 'shoutout to the mods',
+  'question: whats your favorite game of all time?', 'hi from work, dont tell my boss', 'you got me into this game, thank you', 'W stream today',
+  'when are you playing {game} again', 'can we get a lore recap', 'HELLO from {country}', 'youre my favorite streamer fr', 'notice me pls',
+  'my friend {user} says hi', 'this is the best community', 'do the voice', 'DO THE THING', 'can you rate my name', 'gm {streamer}, coffee?',
+  'happy birthday {streamer}!!', 'you inspired me to start streaming', 'my cat is watching with me', 'first highlight ever, hi mom',
+]
