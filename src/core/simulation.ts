@@ -936,11 +936,13 @@ function spawnRaid(ctx: Ctx, t: number, count: number, out: ChatMessage[], raidi
   const { rng } = ctx
   const raiders: Chatter[] = []
   const n = Math.min(60, Math.max(4, Math.round(Math.sqrt(count) * 1.5)))
-  for (let i = 0; i < n; i++) raiders.push(freshChatter(ctx, rng.chance(0.4) ? 'emoter' : 'normal'))
-  const raidMsg = fill(ctx, rng.pick(['{e:hype} RAID {e:hype}', 'twitchRaid twitchRaid twitchRaid', '{e:hype} {e:hype} {e:hype}', 'RAID RAID RAID', '{e:love} raid {e:love}', 'we are here {e:hype}', 'RAIDERS HERE', 'hello from the raid {e:wave}', 'RAID', 'twitchRaid']))
+  // raiders come from another channel: no sub/bits badges here (maybe Prime / global badges)
+  for (let i = 0; i < n; i++) raiders.push(freshChatter(ctx, rng.chance(0.4) ? 'emoter' : 'normal', true))
+  const raidMsg = fill(ctx, rng.pick(['{e:hype} RAID {e:hype}', 'twitchRaid twitchRaid twitchRaid', '{e:hype} {e:hype} {e:hype}', 'RAID RAID RAID', '{e:love} RAID {e:love}', 'we are here {e:hype}', 'RAIDERS HERE', 'hello from the raid {e:wave}', 'RAID', 'twitchRaid', 'twitchRaid RAID twitchRaid', '{e:jam} RAID {e:jam}']))
   let tt = t + 300
   for (const r of raiders) {
-    out.push(makeMessage(ctx, tt, r, rng.chance(0.75) ? raidMsg : fill(ctx, rng.pick(['hi {e:wave}', 'raid {e:hype}', 'hello!', 'RAID', 'we come in peace', 'nice stream', 'what game is this', 'hi chat', 'RAIDDD', 'raiders {e:hype}'])), { special: rng.chance(0.5) ? { label: 'Raider', icon: 'raider' } : undefined }))
+    const text = rng.chance(0.6) ? raidMsg : fill(ctx, rng.pick(['hi {e:wave}', 'raid {e:hype}', 'hello!', 'RAID', 'we come in peace', 'nice stream', 'what game is this', 'hi chat', 'RAIDDD', 'raiders {e:hype}', 'raid time', 'we made it', 'hello new streamer', 'twitchRaid', 'RAID {e:hype}', 'ayo raid', 'first time here from the raid', 'this stream looks cool', 'greetings {e:wave}', 'raid squad', 'RAAAID']))
+    out.push(makeMessage(ctx, tt, r, text, { special: rng.chance(0.5) ? { label: 'Raider', icon: 'raider' } : undefined }))
     tt += rng.exp(4500 / n)
   }
   ;(ctx.raidWindows ??= []).push({ t0: t, t1: t + 90000, users: raiders })
