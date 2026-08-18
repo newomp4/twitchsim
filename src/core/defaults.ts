@@ -47,7 +47,7 @@ export const DEFAULT_CONFIG: Config = {
   announcementRate: 0.3,
   actionsRate: 0.15,
   mentionsRate: 0.5,
-  powerUpsRate: 0.15,
+  powerUpsRate: 0, // giant emotes / message effects look like a glitch if you don't know Twitch power-ups: opt-in
   rewardRate: 0.2,
   systemNotices: true,
   welcomeMessage: true,
@@ -109,16 +109,16 @@ export const DEFAULT_CONFIG: Config = {
   frameW: 1920,
   frameH: 1080,
   framePreset: 'chat',
-  anchor: 'br',
+  anchor: 'c',
   marginX: 40,
   marginY: 40,
 }
 
 export const FRAME_PRESETS: Record<Config['framePreset'], { w: number; h: number; label: string }> = {
-  chat: { w: 0, h: 0, label: 'Chat only (tight)' },
-  '1080p': { w: 1920, h: 1080, label: '1080p (1920×1080)' },
-  '1440p': { w: 2560, h: 1440, label: '1440p (2560×1440)' },
-  '4k': { w: 3840, h: 2160, label: '4K UHD (3840×2160)' },
-  vertical: { w: 1080, h: 1920, label: 'Vertical 9:16 (1080×1920)' },
+  chat: { w: 0, h: 0, label: 'Chat only' },
+  '1080p': { w: 1920, h: 1080, label: '1080p' },
+  '1440p': { w: 2560, h: 1440, label: '1440p' },
+  '4k': { w: 3840, h: 2160, label: '4K' },
+  vertical: { w: 1080, h: 1920, label: 'Vertical 9:16' },
   custom: { w: 0, h: 0, label: 'Custom' },
 }

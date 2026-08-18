@@ -53,7 +53,7 @@ export function computeGeometry(cfg: Config): ExportGeometry {
     const my = cfg.marginY
     const a = cfg.anchor
     chatX = a === 'tl' || a === 'bl' || a === 'l' ? mx : a === 'tr' || a === 'br' || a === 'r' ? outW - chatW - mx : Math.round((outW - chatW) / 2)
-    chatY = a === 'tl' || a === 'tr' ? my : a === 'bl' || a === 'br' ? outH - chatH - my : Math.round((outH - chatH) / 2)
+    chatY = a === 'tl' || a === 't' || a === 'tr' ? my : a === 'bl' || a === 'b' || a === 'br' ? outH - chatH - my : Math.round((outH - chatH) / 2)
   }
   // video codecs need even dimensions
   outW = Math.max(2, Math.ceil(outW / 2) * 2)

@@ -46,7 +46,7 @@ export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Con
 
   return (
     <>
-      <Section title="What chat says">
+      <Section title="Lines">
         <Segmented
           value={cfg.mode === 'hype' ? 'ambient' : cfg.mode}
           onChange={(v) => set('mode', v)}
@@ -110,33 +110,24 @@ export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Con
               }}
             />
             <p className="hint">
-              One message per line: <code>username: message</code>. A line without a name is said by a random viewer. Paste what your AI wrote (Help tab has the prompt), or drop a .txt/.json file onto the box.
+              One message per line: <code>username: message</code>. No name = a random viewer says it. Paste what your AI wrote (Help tab has the prompt) or drop a .txt/.json file here.
               {cfg.mode === 'script' && !cfg.script.trim() && <b> No lines yet — generated chat is shown until you add some.</b>}
             </p>
           </>
         )}
-        {usesFiller && (
-          <>
-            {usesLines && <Toggle label="Filler re-uses my lines (shuffled) instead of generic chatter" value={cfg.fillerFromScript} onChange={(v) => set('fillerFromScript', v)} hint="Keeps the whole chat on your topic: filler messages are random picks from the lines above." />}
-            <Row>
-              {!(cfg.fillerFromScript && usesLines) && <Select label="Filler chatter vibe" value={cfg.mood} options={MOODS} onChange={(v) => set('mood', v)} />}
-              {cfg.mode === 'mixed' && <Slider label="Filler messages between my lines" value={cfg.scriptGapMultiplier} min={0} max={20} step={1} onChange={(v) => set('scriptGapMultiplier', v)} />}
-            </Row>
-          </>
-        )}
       </Section>
 
-      <Section title="Speed & length">
-        <Field label="Pacing">
-          <Segmented
-            value={cfg.pacing}
-            onChange={(v) => set('pacing', v)}
-            options={[
-              { value: 'natural', label: 'Natural (human-like)', title: 'Random gaps, bursts and lulls, crowd reactions — like real chat' },
-              { value: 'even', label: 'Regular intervals', title: 'Metronomic: every message lands exactly one interval apart' },
-            ]}
-          />
-        </Field>
+      {usesFiller && (
+        <Section title="Filler chat">
+          <Row>
+            {!(cfg.fillerFromScript && usesLines) && <Select label="Vibe" value={cfg.mood} options={MOODS} onChange={(v) => set('mood', v)} />}
+            {cfg.mode === 'mixed' && <Slider label="Filler messages between my lines" value={cfg.scriptGapMultiplier} min={0} max={20} step={1} onChange={(v) => set('scriptGapMultiplier', v)} />}
+          </Row>
+          {usesLines && <Toggle label="Filler re-uses my own lines (shuffled) instead of generic chatter" value={cfg.fillerFromScript} onChange={(v) => set('fillerFromScript', v)} />}
+        </Section>
+      )}
+
+      <Section title="Timing">
         <Slider
           label={cfg.pacing === 'even' ? 'Interval' : 'Chat speed'}
           value={cfg.messagesPerMinute}
@@ -145,21 +136,22 @@ export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Con
           step={1}
           log
           onChange={(v) => set('messagesPerMinute', v)}
-          format={(v) => (cfg.pacing === 'even' ? `one message every ${(60 / v).toFixed(2)} s (${v}/min)` : `${v} msg/min`)}
-          hint={cfg.pacing === 'even' ? 'Perfectly regular. !wait pauses in your lines are still honored; bursts and crowd reactions are off.' : '10–30 = small stream · 100–300 = mid-size · 500+ = huge (unreadable, like real big chats)'}
+          format={(v) => (cfg.pacing === 'even' ? `every ${(60 / v).toFixed(2)} s (${v}/min)` : `${v} msg/min`)}
+          hint={cfg.pacing === 'even' ? 'Perfectly regular; !wait pauses in your lines are kept.' : '10–30 = small stream · 100–300 = mid-size · 500+ = huge'}
         />
         <Row>
+          <Toggle label="Regular intervals (metronomic)" value={cfg.pacing === 'even'} onChange={(v) => set('pacing', v ? 'even' : 'natural')} />
           <Toggle label="Start with the chat already full" value={cfg.prefillSec > 0} onChange={(v) => set('prefillSec', v ? 20 : 0)} />
-          {usesLines && <Toggle label="Loop-friendly: end right after my last line" value={cfg.durationAuto} onChange={(v) => set('durationAuto', v)} />}
         </Row>
+        {usesLines && <Toggle label="End right after my last line (loop-friendly)" value={cfg.durationAuto} onChange={(v) => set('durationAuto', v)} />}
         {!cfg.durationAuto || !usesLines ? (
-          <Slider label="Duration" value={cfg.durationSec} min={1} max={600} onChange={(v) => set('durationSec', v)} format={(v) => `${v}s`} />
+          <Slider label="Length" value={cfg.durationSec} min={1} max={600} onChange={(v) => set('durationSec', v)} format={(v) => `${v}s`} />
         ) : (
           <Slider label="Seconds after the last line" value={cfg.tailSec} min={0} max={60} step={0.5} onChange={(v) => set('tailSec', v)} format={(v) => `${v}s`} />
         )}
       </Section>
 
-      <Collapsible title="Stream & chatters" hint="streamer name, cast size, custom usernames, seed">
+      <Collapsible title="Chatters & stream" hint="names, seed, streamer, how many people">
         <Row>
           <TextInput label="Streamer name" value={cfg.streamerName} onChange={(v) => set('streamerName', v)} placeholder="Streamer" />
           <TextInput label="Game / topic" value={cfg.gameName} onChange={(v) => set('gameName', v)} placeholder="the game" />
@@ -199,7 +191,7 @@ export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Con
         </Row>
       </Collapsible>
 
-      <Collapsible title="Random events" hint="how often subs, gifts, raids, cheers, replies… happen in filler chat">
+      <Collapsible title="Random events" hint="subs, gifts, raids, replies… in filler chat">
         <Row>
           <Slider label="Subs / resubs" value={cfg.subsRate} min={0} max={1} step={0.01} onChange={(v) => set('subsRate', v)} format={lvl} />
           <Slider label="Gift subs & gift bombs" value={cfg.giftsRate} min={0} max={1} step={0.01} onChange={(v) => set('giftsRate', v)} format={lvl} />

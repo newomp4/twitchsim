@@ -26,7 +26,7 @@ export function StylePanel({
   const pct = (v: number) => `${Math.round(v * 100)}%`
   return (
     <>
-      <Section title="Look">
+      <Section title="Theme">
         <Segmented
           value={cfg.chatStyle}
           onChange={(v) => {
@@ -37,15 +37,14 @@ export function StylePanel({
           options={[
             { value: 'twitch-dark', label: 'Twitch dark', title: 'The twitch.tv chat column, dark theme' },
             { value: 'twitch-light', label: 'Twitch light', title: 'twitch.tv chat, light theme' },
-            { value: 'transparent', label: 'Transparent overlay', title: 'No panel background — drop it straight onto your video' },
-            { value: 'custom', label: 'Custom background', title: 'Your own background color / opacity / rounding' },
+            { value: 'transparent', label: 'Transparent', title: 'No panel background — drop it straight onto your video' },
+            { value: 'custom', label: 'Custom', title: 'Your own background color / opacity' },
           ]}
         />
         {cfg.chatStyle === 'custom' && (
           <Row>
             <ColorInput label="Background" value={cfg.bgColor} onChange={(v) => set('bgColor', v)} />
             <Slider label="Opacity" value={cfg.bgOpacity} min={0} max={1} step={0.01} onChange={(v) => set('bgOpacity', v)} format={pct} />
-            <Slider label="Corner radius" value={cfg.cornerRadius} min={0} max={40} onChange={(v) => set('cornerRadius', v)} />
           </Row>
         )}
         {overlayish && (
@@ -54,48 +53,43 @@ export function StylePanel({
               <Segmented value={cfg.theme} onChange={(v) => set('theme', v)} options={[{ value: 'dark', label: 'Light text (dark video)' }, { value: 'light', label: 'Dark text (bright video)' }]} />
             </Field>
             <Row>
-              <Toggle label="Text shadow" value={cfg.textShadow} onChange={(v) => set('textShadow', v)} />
               <Slider label="Text outline" value={cfg.textOutline} min={0} max={4} step={0.5} onChange={(v) => set('textOutline', v)} format={(v) => (v ? `${v}px` : 'off')} />
+              <Toggle label="Text shadow" value={cfg.textShadow} onChange={(v) => set('textShadow', v)} />
             </Row>
           </>
         )}
         <Slider label="Fade out the top edge" value={cfg.fadeTopEdge} min={0} max={300} step={5} onChange={(v) => set('fadeTopEdge', v)} format={(v) => (v ? `${v}px` : 'off')} />
       </Section>
 
-      <Section title="Size">
+      <Section title="Size & text">
         <Row>
+          <Slider label="Width" value={cfg.width} min={200} max={1200} step={2} onChange={(v) => set('width', v)} format={(v) => `${v}px`} />
           <Slider label="Height" value={cfg.height} min={60} max={2160} step={2} onChange={(v) => set('height', v)} format={(v) => `${v}px`} />
-          <NumberInput label="exact px" value={cfg.height} min={40} max={4000} onChange={(v) => set('height', Math.round(v))} />
         </Row>
-        <Row>
-          <Slider label="Width" value={cfg.width} min={200} max={1200} step={2} onChange={(v) => set('width', v)} format={(v) => `${v}px`} hint="Twitch's column is 340px" />
-          <NumberInput label="exact px" value={cfg.width} min={120} max={3000} onChange={(v) => set('width', Math.round(v))} />
-        </Row>
-        <p className="hint">These are Twitch-scale pixels; the export scale (Export tab) multiplies them, so 340×600 at 4× is a 1360×2400 sharp overlay.</p>
-      </Section>
-
-      <Section title="Text">
+        <p className="hint">Twitch's own column is 340 px wide. These are Twitch-scale pixels — the export scale multiplies them (340×600 at 3× = a 1020×1800 overlay).</p>
         <Field label="Font size (Twitch chat setting)">
           <Segmented value={cfg.fontSize} onChange={(v) => set('fontSize', v)} options={[{ value: 'small', label: 'Small' }, { value: 'default', label: 'Default' }, { value: 'large', label: 'Bigger' }, { value: 'xlarge', label: 'Biggest' }]} />
         </Field>
-        <Slider label="Extra scale (text + badges + emotes)" value={cfg.fontScale} min={0.6} max={2.5} step={0.05} onChange={(v) => set('fontScale', v)} format={(v) => `${v.toFixed(2)}×`} />
       </Section>
 
       <Section title="New message animation">
-        <Segmented
-          value={cfg.animation === 'slide' ? 'slide-up' : cfg.animation}
-          onChange={(v) => set('animation', v)}
-          options={[
-            { value: 'instant', label: 'Instant', title: 'What real Twitch does: the message just appears' },
-            { value: 'slide-up', label: 'Slide up', title: 'New message pushes the chat up smoothly' },
-            { value: 'slide-left', label: 'From the left', title: 'Slides in from the left edge' },
-            { value: 'slide-right', label: 'From the right', title: 'Slides in from the right edge' },
-            { value: 'fade', label: 'Fade in' },
-            { value: 'pop', label: 'Pop', title: 'Scales in with a little bounce' },
-            { value: 'slide-fade', label: 'Slide + fade' },
-          ]}
-        />
-        {cfg.animation !== 'instant' && <Slider label="Duration" value={cfg.animationMs} min={60} max={800} step={10} onChange={(v) => set('animationMs', v)} format={(v) => `${v}ms`} />}
+        <Row>
+          <Select
+            label="Style"
+            value={cfg.animation === 'slide' ? 'slide-up' : cfg.animation}
+            onChange={(v) => set('animation', v)}
+            options={[
+              { value: 'slide-up', label: 'Slide up' },
+              { value: 'instant', label: 'Instant (like real Twitch)' },
+              { value: 'slide-fade', label: 'Slide up + fade' },
+              { value: 'fade', label: 'Fade in' },
+              { value: 'pop', label: 'Pop' },
+              { value: 'slide-left', label: 'From the left' },
+              { value: 'slide-right', label: 'From the right' },
+            ]}
+          />
+          {cfg.animation !== 'instant' && <Slider label="Duration" value={cfg.animationMs} min={60} max={800} step={10} onChange={(v) => set('animationMs', v)} format={(v) => `${v}ms`} />}
+        </Row>
       </Section>
 
       <Section title="Badges & emotes">
@@ -103,13 +97,22 @@ export function StylePanel({
           <Toggle label="Badges" value={cfg.showBadges} onChange={(v) => set('showBadges', v)} />
           <Toggle label="Timestamps" value={cfg.timestamps} onChange={(v) => set('timestamps', v)} />
         </Row>
+        <Row>
+          <Toggle label="Twitch global emotes" value={cfg.useTwitchEmotes} onChange={(v) => set('useTwitchEmotes', v)} />
+          <Toggle label="7TV emotes (KEKW, OMEGALUL…)" value={cfg.use7tvEmotes} onChange={(v) => set('use7tvEmotes', v)} />
+        </Row>
+        <Row>
+          <Toggle label="Animated emotes" value={cfg.animatedEmotes} onChange={(v) => set('animatedEmotes', v)} />
+          <Slider label="Emotes in filler chat" value={cfg.emoteDensity} min={0} max={1} step={0.01} format={pct} onChange={(v) => set('emoteDensity', v)} />
+        </Row>
         {cfg.showBadges && (
-          <Field label="Badges random chatters may wear" hint="Turn groups off to simulate a chat with only a couple of icons. Badges you write explicitly in your lines ([mod], [sub]…) and your uploaded extras are unaffected.">
+          <Collapsible title="Which badges random chatters wear" hint={cfg.badgePool.length === ALL_BADGE_GROUPS.length ? 'all groups' : cfg.badgePool.length === 0 ? 'none' : `${cfg.badgePool.length} of ${ALL_BADGE_GROUPS.length} groups`}>
+            <p className="hint">Turn groups off to simulate a chat with only a couple of icons. Badges you write explicitly in your lines ([mod], [sub]…) and your uploaded extras are unaffected.</p>
             <div className="chips">
               {BADGE_GROUPS.map((g) => {
                 const on = cfg.badgePool.includes(g.key)
                 return (
-                  <button key={g.key} type="button" className={'chip' + (on ? ' on' : '')} onClick={() => set('badgePool', on ? cfg.badgePool.filter((k) => k !== g.key) : [...cfg.badgePool, g.key])}>
+                  <button key={g.key} type="button" className={'chip' + (on ? ' on' : '')} aria-pressed={on} onClick={() => set('badgePool', on ? cfg.badgePool.filter((k) => k !== g.key) : [...cfg.badgePool, g.key])}>
                     {g.label}
                   </button>
                 )
@@ -124,21 +127,21 @@ export function StylePanel({
                 mod / vip / sub only
               </button>
             </div>
-          </Field>
+          </Collapsible>
         )}
-        <Row>
-          <Toggle label="Twitch global emotes" value={cfg.useTwitchEmotes} onChange={(v) => set('useTwitchEmotes', v)} />
-          <Toggle label="7TV emotes (KEKW, OMEGALUL…)" value={cfg.use7tvEmotes} onChange={(v) => set('use7tvEmotes', v)} />
-        </Row>
-        <Row>
-          <Toggle label="Animated emotes" value={cfg.animatedEmotes} onChange={(v) => set('animatedEmotes', v)} />
-          <Slider label="Emote density in filler chat" value={cfg.emoteDensity} min={0} max={1} step={0.01} format={pct} onChange={(v) => set('emoteDensity', v)} />
-        </Row>
       </Section>
 
       <CustomIcons cfg={cfg} set={set} patch={patch} />
 
-      <Collapsible title="Advanced look" hint="readable colors, mod view, alternating rows, padding, font family">
+      <Collapsible title="Advanced look" hint="scale, readable colors, mod view, alternating rows, padding, font">
+        <Row>
+          <NumberInput label="Exact width (px)" value={cfg.width} min={120} max={3000} onChange={(v) => set('width', Math.round(v))} />
+          <NumberInput label="Exact height (px)" value={cfg.height} min={40} max={4000} onChange={(v) => set('height', Math.round(v))} />
+        </Row>
+        <Row>
+          <Slider label="Extra scale (text + badges + emotes)" value={cfg.fontScale} min={0.6} max={2.5} step={0.05} onChange={(v) => set('fontScale', v)} format={(v) => `${v.toFixed(2)}×`} />
+          <Slider label="Corner radius" value={cfg.cornerRadius} min={0} max={40} onChange={(v) => set('cornerRadius', v)} format={(v) => `${v}px`} />
+        </Row>
         <Row>
           <Toggle label="Readable colors (Twitch default on)" value={cfg.readableColors} onChange={(v) => set('readableColors', v)} />
           <Toggle label="Bold usernames" value={cfg.boldNames} onChange={(v) => set('boldNames', v)} />

@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import type { Config } from '../core/types'
 
 export function Section({ title, children, hint }: { title: string; children: ReactNode; hint?: string }) {
   return (
@@ -134,6 +135,23 @@ export function Segmented<T extends string>({ value, options, onChange }: { valu
         <button key={o.value} type="button" className={o.value === value ? 'on' : ''} title={o.title} aria-pressed={o.value === value} onClick={() => onChange(o.value)}>
           {o.label}
         </button>
+      ))}
+    </div>
+  )
+}
+
+const POSITIONS: { v: Config['anchor']; title: string }[] = [
+  { v: 'tl', title: 'Top left' }, { v: 't', title: 'Top' }, { v: 'tr', title: 'Top right' },
+  { v: 'l', title: 'Left' }, { v: 'c', title: 'Center' }, { v: 'r', title: 'Right' },
+  { v: 'bl', title: 'Bottom left' }, { v: 'b', title: 'Bottom' }, { v: 'br', title: 'Bottom right' },
+]
+
+/** 3×3 picker for where the chat sits inside a bigger frame. */
+export function PositionGrid({ value, onChange }: { value: Config['anchor']; onChange: (v: Config['anchor']) => void }) {
+  return (
+    <div className="posgrid" role="radiogroup" aria-label="Chat position">
+      {POSITIONS.map((p) => (
+        <button key={p.v} type="button" title={p.title} aria-label={p.title} role="radio" aria-checked={p.v === value} className={p.v === value ? 'on' : ''} onClick={() => onChange(p.v)} />
       ))}
     </div>
   )

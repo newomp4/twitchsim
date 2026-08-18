@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import type { Config } from '../../core/types'
 import { prepareBadge, prepareEmote, refitBadge, REPLACEABLE_SETS, type CustomBadge, type BadgeFit } from '../../core/customAssets'
-import { Section, Slider, Toggle, Row, Segmented, Field } from '../controls'
+import { Collapsible, Slider, Toggle, Row, Segmented, Field } from '../controls'
 
 const SUB_TIER_DEFAULTS = [1, 3, 6, 9, 12, 18, 24, 36, 48, 60]
 
@@ -80,7 +80,8 @@ export function CustomIcons({ cfg, set, patch }: { cfg: Config; set: <K extends 
   }
 
   return (
-    <Section title="Your own icons" hint="Upload any image — it's fitted into Twitch's square badge box for you and the corners are rounded (adjustable). PNG with transparency looks best; JPG/GIF/WebP/SVG also work.">
+    <Collapsible title="Your own icons" hint={badges.length + cfg.customEmotes.length ? `${badges.length} badge${badges.length === 1 ? '' : 's'}, ${cfg.customEmotes.length} emote${cfg.customEmotes.length === 1 ? '' : 's'} uploaded` : 'sub badges, custom emotes, replace a Twitch badge'}>
+      <p className="hint">Upload any image — it's fitted into Twitch's square badge box for you and the corners are rounded (adjustable). PNG with transparency looks best; JPG/GIF/WebP/SVG also work.</p>
       <Row>
         <Field label="Fit uploads">
           <Segmented value={cfg.badgeFit} onChange={(v) => void changeFit(v)} options={[{ value: 'cover', label: 'Crop to square', title: 'Center-crop so the image fills the badge (like Twitch badges)' }, { value: 'contain', label: 'Fit inside', title: 'Nothing cropped; transparent padding' }]} />
@@ -209,6 +210,6 @@ export function CustomIcons({ cfg, set, patch }: { cfg: Config; set: <K extends 
           Remove all uploads
         </button>
       )}
-    </Section>
+    </Collapsible>
   )
 }

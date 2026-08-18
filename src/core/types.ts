@@ -243,7 +243,7 @@ export interface Config {
   frameW: number
   frameH: number
   framePreset: 'chat' | '1080p' | '1440p' | '4k' | 'vertical' | 'custom'
-  anchor: 'tl' | 'tr' | 'bl' | 'br' | 'l' | 'r' | 'c'
+  anchor: 'tl' | 't' | 'tr' | 'l' | 'c' | 'r' | 'bl' | 'b' | 'br'
   marginX: number
   marginY: number
 }

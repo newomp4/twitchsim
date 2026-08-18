@@ -23,7 +23,7 @@ import { styleFromConfig } from '../core/layout'
 import { compileScene } from '../ae/scene'
 
 const IN_AE = isCEP()
-const TABS = (IN_AE ? ['Chat', 'Style', 'After Effects', 'Help'] : ['Chat', 'Style', 'Export', 'Help']) as readonly ('Chat' | 'Style' | 'Export' | 'After Effects' | 'Help')[]
+const TABS = (IN_AE ? ['Chat', 'Look', 'After Effects', 'Help'] : ['Chat', 'Look', 'Export', 'Help']) as readonly ('Chat' | 'Look' | 'Export' | 'After Effects' | 'Help')[]
 type Tab = (typeof TABS)[number]
 
 const assets = new AssetCache()
@@ -219,7 +219,7 @@ export default function App() {
           </nav>
           <div className="panel-body" ref={panelBodyRef}>
             {tab === 'Chat' && <ChatPanel cfg={cfg} set={set} />}
-            {tab === 'Style' && <StylePanel cfg={cfg} set={set} patch={patch} channel={channel} setChannel={setChannel} />}
+            {tab === 'Look' && <StylePanel cfg={cfg} set={set} patch={patch} channel={channel} setChannel={setChannel} />}
             {/* export/build panels stay mounted so a running job keeps its progress + Cancel while you look at other tabs */}
             {!IN_AE && (
               <div hidden={tab !== 'Export'}>

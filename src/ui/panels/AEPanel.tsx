@@ -4,7 +4,7 @@ import type { Timeline } from '../../core/simulation'
 import type { AssetCache } from '../../core/assets'
 import { computeGeometry } from '../../export/exporter'
 import { FRAME_PRESETS } from '../../core/defaults'
-import { Section, Row, Segmented, NumberInput, Select, Field, TextInput, Collapsible, Slider } from '../controls'
+import { Section, Row, Segmented, NumberInput, Select, Field, TextInput, Collapsible, Slider, PositionGrid } from '../controls'
 import { buildInAE, hostInfoAE, safeCompName, buildKeyFor, type AEProgress, type AEBuildResult, type AEHostInfo } from '../../ae/build'
 import { callHost, pickFolder, revealPath, systemPath, hostInfo, posixPath } from '../../ae/cep'
 
@@ -103,7 +103,7 @@ export function AEPanel({ cfg, set, patch, timeline, assets }: { cfg: Config; se
 
   return (
     <>
-      <Section title="Build the chat in After Effects" hint="Turns the current chat into real AE layers: one precomp per message (parent anything to it), text layers, shape layers, badge/emote footage, and a single keyframed “Scroll” null that drives the whole stack.">
+      <Section title="Comp" hint="Builds the current chat as real AE layers: one precomp per message, text & shape layers, badge/emote footage and one keyframed “Scroll” null.">
         <p className="hint">
           {host ? `After Effects ${host.version}` : 'After Effects'}
           {info ? (info.projectPath ? ` · project “${info.projectName}”` : ' · project not saved yet (save it so the images live next to it)') : infoErr ? ` · ${infoErr}` : ' · connecting…'}
@@ -122,17 +122,17 @@ export function AEPanel({ cfg, set, patch, timeline, assets }: { cfg: Config; se
         )}
         {cfg.framePreset !== 'chat' && (
           <>
-            <Field label="Chat position in comp">
-              <Segmented value={cfg.anchor} onChange={(v) => set('anchor', v)} options={[{ value: 'tl', label: '↖' }, { value: 'tr', label: '↗' }, { value: 'l', label: '←' }, { value: 'c', label: '•' }, { value: 'r', label: '→' }, { value: 'bl', label: '↙' }, { value: 'br', label: '↘' }]} />
-            </Field>
             <Row>
-              <NumberInput label="Margin X (px)" value={cfg.marginX} min={0} max={4000} onChange={(v) => set('marginX', Math.round(v))} />
+              <Field label="Chat position in the comp">
+                <PositionGrid value={cfg.anchor} onChange={(v) => set('anchor', v)} />
+              </Field>
+              <NumberInput label="Margin from the edge, X (px)" value={cfg.marginX} min={0} max={4000} onChange={(v) => set('marginX', Math.round(v))} />
               <NumberInput label="Margin Y (px)" value={cfg.marginY} min={0} max={4000} onChange={(v) => set('marginY', Math.round(v))} />
             </Row>
           </>
         )}
         <Field label="Scale (chat px → comp px)" hint="Text and shapes are vector; badges/emotes are imported at their highest resolution.">
-          <Segmented value={String(cfg.exportScale)} onChange={(v) => set('exportScale', parseFloat(v))} options={[{ value: '1', label: '1×' }, { value: '2', label: '2× (1080p)' }, { value: '3', label: '3× (1440p)' }, { value: '4', label: '4× (4K)' }, { value: '5.6', label: '5.6× (4K big)' }]} />
+          <Segmented value={String(cfg.exportScale)} onChange={(v) => set('exportScale', parseFloat(v))} options={[{ value: '1', label: '1×' }, { value: '2', label: '2× · 1080p' }, { value: '3', label: '3× · 1440p' }, { value: '4', label: '4× · 4K' }, { value: '5.6', label: '5.6×' }]} />
         </Field>
         <Row>
           <Select label="Frame rate" value={String(cfg.exportFps)} onChange={(v) => set('exportFps', parseInt(v, 10))} options={[{ value: '24', label: '24 fps' }, { value: '25', label: '25 fps' }, { value: '30', label: '30 fps' }, { value: '50', label: '50 fps' }, { value: '60', label: '60 fps' }]} />
@@ -143,7 +143,8 @@ export function AEPanel({ cfg, set, patch, timeline, assets }: { cfg: Config; se
         </p>
       </Section>
 
-      <Section title="Images folder" hint="Badge & emote PNGs the comp links to. Keep this folder with your project.">
+      <Collapsible title="Images folder" hint={prefs.folder ? 'custom' : info?.projectDir ? 'next to the project' : '~/Documents/TwitchSim'}>
+        <p className="hint">Badge & emote PNGs the comp links to. Keep this folder with your project.</p>
         <p className="path">{folder}</p>
         <div className="btns">
           <button
@@ -165,7 +166,7 @@ export function AEPanel({ cfg, set, patch, timeline, assets }: { cfg: Config; se
             Reveal
           </button>
         </div>
-      </Section>
+      </Collapsible>
 
       <Section title="Build">
         <div className="exportbar">

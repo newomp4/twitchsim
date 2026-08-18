@@ -5,7 +5,7 @@ import type { AssetCache } from '../../core/assets'
 import { computeGeometry, runExport, suggestedFilename, mimeFor, type ExportProgress, type ExportResult } from '../../export/exporter'
 import { canPickFiles, pickSaveFile, downloadBlob, formatBytes } from '../../export/saveFile'
 import { FRAME_PRESETS } from '../../core/defaults'
-import { Section, Slider, Toggle, Row, Segmented, ColorInput, NumberInput, Select, Field } from '../controls'
+import { Section, Slider, Toggle, Row, Segmented, ColorInput, NumberInput, Select, Field, PositionGrid } from '../controls'
 
 const FORMATS: { value: Config['exportFormat']; label: string; alpha: boolean; note: string }[] = [
   { value: 'webm-alpha', label: 'WebM (VP9 + alpha)', alpha: true, note: 'Transparent. Plays in Chrome/Firefox/OBS/web; DaVinci Resolve reads it (Mac best). Fast.' },
@@ -60,20 +60,12 @@ export function ExportPanel({ cfg, set, patch, timeline, assets }: { cfg: Config
   return (
     <>
       <Section title="Format">
-        <div className="formats">
-          {FORMATS.map((f) => (
-            <button key={f.value} type="button" className={'preset' + (cfg.exportFormat === f.value ? ' on' : '')} onClick={() => set('exportFormat', f.value)}>
-              <b>
-                {f.label} {f.alpha && <span className="tag">alpha</span>}
-              </b>
-              <span>{f.note}</span>
-            </button>
-          ))}
-        </div>
+        <Select label="File type" value={cfg.exportFormat} onChange={(v) => set('exportFormat', v)} options={FORMATS.map((f) => ({ value: f.value, label: f.label + (f.alpha ? '  · transparent' : '') }))} />
+        <p className="hint">{fmt.note}</p>
         {fmt.alpha ? (
-          <Toggle label="Transparent background (alpha channel)" value={cfg.exportTransparent} onChange={(v) => set('exportTransparent', v)} hint="Off = the frame is filled with the background color below. The chat panel keeps its own background if the style has one (Twitch dark/light); use the Transparent style for a fully see-through overlay." />
+          <Toggle label="Transparent background" value={cfg.exportTransparent} onChange={(v) => set('exportTransparent', v)} hint="Off = the frame is filled with the color below. A Twitch dark/light style keeps its own panel background either way; pick the Transparent look for a fully see-through overlay." />
         ) : (
-          <p className="hint">This format has no alpha channel; the frame is filled with the color below.</p>
+          <p className="hint">No alpha channel in this format — the frame is filled with the color below.</p>
         )}
         {(!fmt.alpha || !cfg.exportTransparent) && (
           <Row>
@@ -88,10 +80,10 @@ export function ExportPanel({ cfg, set, patch, timeline, assets }: { cfg: Config
       </Section>
 
       <Section title="Resolution">
-        <Field label="Render scale (chat px → output px)">
-          <Segmented value={String(cfg.exportScale)} onChange={(v) => set('exportScale', parseFloat(v))} options={[{ value: '1', label: '1×' }, { value: '2', label: '2× (1080p sharp)' }, { value: '3', label: '3× (1440p)' }, { value: '4', label: '4× (4K)' }, { value: '6', label: '6×' }]} />
+        <Field label="Scale (chat px → output px)">
+          <Segmented value={String(cfg.exportScale)} onChange={(v) => set('exportScale', parseFloat(v))} options={[{ value: '1', label: '1×' }, { value: '2', label: '2× · 1080p' }, { value: '3', label: '3× · 1440p' }, { value: '4', label: '4× · 4K' }, { value: '6', label: '6×' }]} />
         </Field>
-        <Field label="Canvas">
+        <Field label="Frame">
           <Segmented value={cfg.framePreset} onChange={(v) => set('framePreset', v)} options={(Object.keys(FRAME_PRESETS) as Config['framePreset'][]).map((k) => ({ value: k, label: FRAME_PRESETS[k].label }))} />
         </Field>
         {cfg.framePreset === 'custom' && (
@@ -102,11 +94,11 @@ export function ExportPanel({ cfg, set, patch, timeline, assets }: { cfg: Config
         )}
         {cfg.framePreset !== 'chat' && (
           <>
-            <Field label="Chat position in frame">
-              <Segmented value={cfg.anchor} onChange={(v) => set('anchor', v)} options={[{ value: 'tl', label: '↖' }, { value: 'tr', label: '↗' }, { value: 'l', label: '←' }, { value: 'c', label: '•' }, { value: 'r', label: '→' }, { value: 'bl', label: '↙' }, { value: 'br', label: '↘' }]} />
-            </Field>
             <Row>
-              <NumberInput label="Margin X (px)" value={cfg.marginX} min={0} max={4000} onChange={(v) => set('marginX', Math.round(v))} />
+              <Field label="Chat position in the frame">
+                <PositionGrid value={cfg.anchor} onChange={(v) => set('anchor', v)} />
+              </Field>
+              <NumberInput label="Margin from the edge, X (px)" value={cfg.marginX} min={0} max={4000} onChange={(v) => set('marginX', Math.round(v))} />
               <NumberInput label="Margin Y (px)" value={cfg.marginY} min={0} max={4000} onChange={(v) => set('marginY', Math.round(v))} />
             </Row>
           </>
