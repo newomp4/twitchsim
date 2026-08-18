@@ -37,7 +37,7 @@ export async function exportWithMediabunny(a: MediabunnyArgs): Promise<ExportRes
     keyFrameInterval: 2,
     hardwareAcceleration: a.alpha ? 'prefer-software' : 'no-preference',
   } as ConstructorParameters<typeof CanvasSource>[1])
-  output.addVideoTrack(videoSource, { frameRate: source.fps })
+  output.addVideoTrack(videoSource, { frameRate: source.fps, maximumPacketCount: Math.ceil(source.totalFrames * 1.34) + 16 })
   await output.start()
   const total = source.totalFrames
   try {
