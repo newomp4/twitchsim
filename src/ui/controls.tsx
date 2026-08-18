@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 export function Section({ title, children, hint }: { title: string; children: ReactNode; hint?: string }) {
   return (
@@ -114,5 +114,19 @@ export function Segmented<T extends string>({ value, options, onChange }: { valu
         </button>
       ))}
     </div>
+  )
+}
+
+export function Collapsible({ title, children, defaultOpen = false, hint }: { title: string; children: ReactNode; defaultOpen?: boolean; hint?: string }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <section className={'sec collapsible' + (open ? ' open' : '')}>
+      <button type="button" className="collapse-head" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <span className="chev">{open ? '▾' : '▸'}</span>
+        <h3>{title}</h3>
+        {hint && !open && <span className="chint">{hint}</span>}
+      </button>
+      {open && <div className="collapse-body">{children}</div>}
+    </section>
   )
 }

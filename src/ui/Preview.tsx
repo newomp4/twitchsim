@@ -85,7 +85,7 @@ export function usePlayer(durationMs: number) {
 
 export type Player = ReturnType<typeof usePlayer>
 
-export function Preview({ cfg, timeline, assets, player, zoom }: { cfg: Config; timeline: Timeline; assets: AssetCache; player: Player; zoom: number | 'fit' }) {
+export function Preview({ cfg, timeline, assets, player, zoom }: { cfg: Config; timeline: Timeline; assets: AssetCache; player: Player; zoom: number | 'fit' | 'auto' }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const renderer = useMemo(() => new ChatRenderer(assets), [assets])
@@ -105,13 +105,14 @@ export function Preview({ cfg, timeline, assets, player, zoom }: { cfg: Config; 
     ro.observe(el)
     return () => ro.disconnect()
   }, [cfg.width, cfg.height])
-  const zoomScale = zoom === 'fit' ? fitScale : zoom
+  const zoomScale = zoom === 'fit' ? fitScale : zoom === 'auto' ? Math.min(1, fitScale) : zoom
 
   // draw loop
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const pxScale = dpr * Math.min(2, Math.max(1, zoomScale))
+    // supersample: at least 2 device pixels per CSS px so text stays crisp even on 1× displays
+    const pxScale = Math.min(4, Math.max(2, dpr) * Math.max(0.5, zoomScale))
     canvas.width = Math.round(cfg.width * pxScale)
     canvas.height = Math.round(cfg.height * pxScale)
     const ctx = canvas.getContext('2d', { alpha: true })!

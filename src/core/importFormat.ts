@@ -1,0 +1,269 @@
+/**
+ * JSON import format (what you can ask an AI to generate) and its conversion to the script DSL.
+ *
+ * {
+ *   "streamer": "MyStreamer", "game": "Valorant",
+ *   "users": [ { "name": "coolguy_92", "color": "#ff69b4", "badges": ["mod", "sub:12", "prime"] }, ... ],
+ *   "messages": [
+ *     "plain text = random chatter",
+ *     { "user": "coolguy_92", "text": "LETS GOOO {e:hype}", "delay": 0.4 },
+ *     { "type": "sub", "user": "coolguy_92", "tier": "prime", "months": 12, "text": "resub hype" },
+ *     { "type": "gift", "user": "a", "to": "b" }, { "type": "gifts", "user": "a", "count": 10 },
+ *     { "type": "raid", "user": "raider", "count": 120 },
+ *     { "type": "announce", "text": "Drops enabled", "color": "green" },
+ *     { "type": "cheer", "user": "x", "bits": 500, "text": "GG" },
+ *     { "type": "highlight" | "first" | "me" | "delete" | "gigantify", "user": "x", "text": "..." },
+ *     { "type": "reply", "user": "x", "target": "coolguy_92", "text": "..." },
+ *     { "type": "reward", "reward": "TTS", "user": "x", "text": "..." },
+ *     { "type": "effect", "effect": "rainbow-eclipse", "user": "x", "text": "..." },
+ *     { "type": "burst", "count": 20, "text": "KEKW" },
+ *     { "type": "wait", "seconds": 3 },
+ *     { "type": "system", "text": "This room is now in slow mode." }
+ *   ]
+ * }
+ * "at" (absolute seconds) or "delay" (seconds after the previous line) are optional on every message.
+ */
+
+export interface ImportUser {
+  name: string
+  login?: string
+  color?: string
+  badges?: string[]
+}
+
+export interface ImportMessage {
+  type?: string
+  user?: string
+  text?: string
+  at?: number
+  delay?: number
+  tier?: string | number
+  months?: number
+  to?: string
+  count?: number
+  bits?: number
+  color?: string
+  seconds?: number
+  reward?: string
+  effect?: string
+  target?: string
+}
+
+export interface ImportDoc {
+  streamer?: string
+  game?: string
+  users?: ImportUser[]
+  messages: (ImportMessage | string)[]
+}
+
+/** Returns the parsed document if `text` is JSON in the import format, else null. */
+export function detectImport(text: string): ImportDoc | null {
+  const t = text.trim()
+  if (!(t.startsWith('{') || t.startsWith('['))) return null
+  try {
+    const j = JSON.parse(t) as unknown
+    if (Array.isArray(j)) return { messages: j as (ImportMessage | string)[] }
+    if (j && typeof j === 'object') {
+      const o = j as Record<string, unknown>
+      const messages = (o.messages ?? o.chat ?? o.lines ?? []) as (ImportMessage | string)[]
+      if (!Array.isArray(messages)) return null
+      return {
+        streamer: typeof o.streamer === 'string' ? o.streamer : undefined,
+        game: typeof o.game === 'string' ? o.game : undefined,
+        users: Array.isArray(o.users) ? (o.users as unknown[]).map(normalizeUser).filter((u): u is ImportUser => !!u) : undefined,
+        messages,
+      }
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+function normalizeUser(u: unknown): ImportUser | null {
+  if (typeof u === 'string') return { name: u }
+  if (!u || typeof u !== 'object') return null
+  const o = u as Record<string, unknown>
+  const name = (o.name ?? o.username ?? o.displayName ?? o.login) as string | undefined
+  if (!name) return null
+  const badges: string[] = []
+  const rawBadges: unknown = o.badges ?? o.roles ?? o.flags
+  if (Array.isArray(rawBadges)) {
+    for (const b of rawBadges) if (typeof b === 'string') badges.push(b)
+  } else if (typeof rawBadges === 'string') badges.push(...rawBadges.split(/[,\s]+/).filter(Boolean))
+  if (o.mod === true || o.moderator === true) badges.push('mod')
+  if (o.vip === true) badges.push('vip')
+  if (o.prime === true) badges.push('prime')
+  if (typeof o.subMonths === 'number') badges.push(`sub:${o.subMonths}`)
+  else if (o.sub === true || o.subscriber === true) badges.push('sub:1')
+  else if (typeof o.sub === 'number') badges.push(`sub:${o.sub}`)
+  if (typeof o.bits === 'number') badges.push(`bits:${o.bits}`)
+  return { name: String(name), login: typeof o.login === 'string' ? o.login : undefined, color: typeof o.color === 'string' ? o.color : undefined, badges }
+}
+
+const FLAG_MAP: Record<string, string> = { moderator: 'mod', subscriber: 'sub', verified: 'partner', streamer: 'broadcaster', owner: 'broadcaster' }
+function normalizeFlag(f: string): string {
+  const [k, v] = f.toLowerCase().split(':')
+  const key = FLAG_MAP[k] ?? k
+  return v ? `${key}:${v}` : key
+}
+
+function tierArg(t: string | number | undefined): string {
+  if (t === undefined) return 't1'
+  const s = String(t).toLowerCase()
+  if (s === 'prime') return 'prime'
+  const n = s.replace(/[^0-9]/g, '')
+  return n === '2' || n === '3' ? `t${n}` : 't1'
+}
+
+function clean(s: unknown): string {
+  return String(s ?? '')
+    .replace(/\s*\n+\s*/g, ' ')
+    .trim()
+}
+
+function userToken(u?: string): string {
+  if (!u || u === '*' || u.toLowerCase() === 'random') return '*'
+  return clean(u).replace(/\s+/g, '_')
+}
+
+/** Converts an import document into script DSL text. */
+export function importToScript(doc: ImportDoc): string {
+  const out: string[] = []
+  for (const u of doc.users ?? []) {
+    const flags = [...(u.badges ?? []).map(normalizeFlag)]
+    if (u.color) flags.push(`color:${u.color.startsWith('#') ? u.color : '#' + u.color}`)
+    const name = u.login && u.login.toLowerCase() !== u.name.toLowerCase() ? `${u.name} (${u.login})` : u.name
+    out.push(`!user ${name.replace(/\s+/g, '_').replace('_(', ' (')}${flags.length ? ' [' + flags.join(' ') + ']' : ''}`)
+  }
+  for (const m of doc.messages) {
+    if (typeof m === 'string') {
+      out.push(clean(m))
+      continue
+    }
+    if (!m || typeof m !== 'object') continue
+    const timing = typeof m.at === 'number' ? `@${m.at} ` : typeof m.delay === 'number' ? `+${m.delay} ` : ''
+    const type = (m.type ?? 'chat').toLowerCase()
+    const user = userToken(m.user)
+    const text = clean(m.text)
+    const withUser = (t: string) => (user === '*' ? t : `${user}: ${t}`)
+    switch (type) {
+      case 'chat':
+      case 'message':
+      case 'msg':
+      case 'text':
+        out.push(timing + withUser(text))
+        break
+      case 'sub':
+      case 'resub':
+      case 'subscribe':
+        out.push(`${timing}!sub ${user} ${tierArg(m.tier)} ${m.months ?? 1}${text ? ' -- ' + text : ''}`)
+        break
+      case 'gift':
+        out.push(`${timing}!gift ${user} ${userToken(m.to ?? m.target)} ${tierArg(m.tier)}`)
+        break
+      case 'gifts':
+      case 'giftbomb':
+      case 'communitygift':
+        out.push(`${timing}!gifts ${user} ${m.count ?? 5} ${tierArg(m.tier)}`)
+        break
+      case 'raid':
+        out.push(`${timing}!raid ${user} ${m.count ?? 50}`)
+        break
+      case 'announce':
+      case 'announcement':
+        out.push(`${timing}!announce ${m.color ?? 'purple'} ${text}`)
+        break
+      case 'cheer':
+      case 'bits':
+        out.push(`${timing}!cheer ${user} ${m.bits ?? m.count ?? 100} ${text}`)
+        break
+      case 'highlight':
+      case 'first':
+      case 'me':
+      case 'delete':
+      case 'gigantify':
+        out.push(`${timing}!${type} ${withUser(text)}`)
+        break
+      case 'reply':
+        out.push(`${timing}!reply ${userToken(m.target ?? m.to)}${user !== '*' ? ' | ' + user : ''}: ${text}`)
+        break
+      case 'reward':
+      case 'redeem':
+        out.push(`${timing}!reward ${clean(m.reward ?? 'Reward')} | ${withUser(text)}`)
+        break
+      case 'effect':
+        out.push(`${timing}!effect ${m.effect ?? 'rainbow-eclipse'} ${withUser(text)}`)
+        break
+      case 'burst':
+      case 'spam':
+        out.push(`${timing}!burst ${m.count ?? 10} ${text || 'KEKW'}`)
+        break
+      case 'wait':
+      case 'pause':
+        out.push(`!wait ${m.seconds ?? m.delay ?? 1}`)
+        break
+      case 'system':
+      case 'notice':
+        out.push(`${timing}!system ${text}`)
+        break
+      case 'timeout':
+        out.push(`${timing}!timeout ${user} ${m.seconds ?? 600}`)
+        break
+      case 'clear':
+      case 'slow':
+      case 'slowoff':
+      case 'emoteonly':
+      case 'emoteonlyoff':
+      case 'followers':
+      case 'subsonly':
+        out.push(`${timing}!${type}${m.seconds ? ' ' + m.seconds : ''}`)
+        break
+      default:
+        out.push(timing + withUser(text))
+    }
+  }
+  return out.join('\n')
+}
+
+/** Names of the imported users, for the chatter pool ("Display (login)" syntax). */
+export function importedNames(doc: ImportDoc): string[] {
+  return (doc.users ?? []).map((u) => (u.login && u.login.toLowerCase() !== u.name.toLowerCase() ? `${u.name} (${u.login})` : u.name))
+}
+
+/** The prompt you paste into ChatGPT / Claude / Gemini to get a compatible JSON file. */
+export const AI_PROMPT = `You are writing a fake Twitch chat log for a video overlay. Output ONLY valid JSON (no markdown, no commentary) in exactly this shape:
+
+{
+  "streamer": "<streamer display name>",
+  "game": "<game or topic>",
+  "users": [
+    { "name": "<twitch-style username>", "color": "<optional #hex>", "badges": ["<optional flags>"] }
+  ],
+  "messages": [
+    { "user": "<name from users, or * for a random viewer>", "text": "<message>", "delay": <seconds after previous message, e.g. 0.3-2.5> },
+    { "type": "sub", "user": "<name>", "tier": "prime" | 1 | 2 | 3, "months": <n>, "text": "<optional resub message>" },
+    { "type": "gift", "user": "<gifter>", "to": "<recipient>" },
+    { "type": "gifts", "user": "<gifter>", "count": <n> },
+    { "type": "raid", "user": "<raiding streamer>", "count": <viewers> },
+    { "type": "announce", "text": "<mod announcement>", "color": "purple" | "blue" | "green" | "orange" },
+    { "type": "cheer", "user": "<name>", "bits": <n>, "text": "<message>" },
+    { "type": "highlight", "user": "<name>", "text": "<channel-points highlighted message>" },
+    { "type": "first", "user": "<new name>", "text": "<first-time chatter message>" },
+    { "type": "reply", "user": "<name>", "target": "<name being replied to>", "text": "<reply>" },
+    { "type": "me", "user": "<name>", "text": "<action, e.g. is dancing>" },
+    { "type": "delete", "user": "<name>", "text": "<message a mod will delete>" },
+    { "type": "burst", "count": <n>, "text": "<thing many people spam at once, e.g. KEKW or W>" },
+    { "type": "wait", "seconds": <n> }
+  ]
+}
+
+Rules:
+- Make it feel like real Twitch chat: mostly short lowercase messages, slang (W, L, ratio, cooked, cracked, skill issue, clip it, no way), typos and repeated letters sometimes (LETS GOOOO), a few longer sentences, some ALL CAPS hype, questions, backseating, inside jokes about what is happening on stream.
+- Usernames must look like real Twitch logins: 4-25 chars, letters/numbers/underscores only, mixed styles (xX_shadow_Xx, jake_99, PogChamper2011, lil_toaster, ttv_niko, KaiFan42, sleepysock54, notarealuser). No spaces. Reuse the same users so a few "regulars" chat a lot.
+- Badge flags you may use in "badges": "mod", "vip", "sub:<months>", "prime", "turbo", "founder", "bits:<total>", "gifter:<count>", "broadcaster" (only for the streamer). Most users should have no or few badges; ~1-3 mods, ~2-5 vips, roughly a third subs.
+- Emotes: write emote codes as plain words in the text, e.g. KEKW, OMEGALUL, LUL, PogChamp, POGGERS, monkaS, Sadge, catJAM, PepeLaugh, Clap, EZ, ICANT, Bedge, HUH, xdd, Prayge, Madge, Okayge, PauseChamp, Pepega, widepeepoHappy, peepoClap, WICKED, Clueless, LETSGO, D:, FeelsBadMan, FeelsGoodMan, HeyGuys, Kappa, BibleThump, NotLikeThis, DansGame, ResidentSleeper, Kreygasm, 4Head, TriHard, VoHiYo, SeemsGood. You may also write {e:hype}, {e:laugh}, {e:sad}, {e:scared}, {e:clap}, {e:love}, {e:jam}, {e:wave} to insert a random fitting emote, and {streamer} for the streamer's name.
+- Sprinkle a few events (subs, a gift bomb, maybe a raid, an announcement, a highlight, one deleted message, a burst when something hype happens) between normal messages. Keep "delay" small (0.2-1.5 s) during hype and larger (2-6 s) when chat is calm.
+- Length: <NUMBER OF MESSAGES, e.g. 80> messages total, about <DURATION, e.g. 60> seconds of chat.
+- Scenario / what is happening on stream: <DESCRIBE THE MOMENT, e.g. "streamer just hit a 1v4 clutch in Valorant ranked, chat goes crazy">.
+- Tone: <e.g. hype / funny / wholesome / toxic-but-PG13 / chill>.`

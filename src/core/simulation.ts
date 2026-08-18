@@ -6,6 +6,7 @@ import { assignBadges, makeBadge, sortBadges, subBadgeFor, bitsBadgeVersion, gif
 import { EmoteRegistry, REACTION_EMOTES, parseMessage } from './emotes'
 import { GENERIC, MOODS, BOT_LINES, SUB_MESSAGES, MOMENTS, SPAM_WORDS, FIRST_TIME_LINES, COUNTRIES, HIGHLIGHT_LINES, type PhrasePool } from '../data/phrases'
 import { parseScript, type ScriptEntry, type UserFlags } from './script'
+import { detectImport, importedNames } from './importFormat'
 
 export interface Timeline {
   messages: ChatMessage[]
@@ -62,8 +63,18 @@ function fmtBig(n: number): string {
 }
 
 export function buildTimeline(inputs: SimInputs): Timeline {
-  const { config: cfg, registry } = inputs
+  let { config: cfg } = inputs
+  const { registry } = inputs
   const rng = new Rng(cfg.seed || 'twitchsim')
+  const imported = cfg.mode === 'ambient' || cfg.mode === 'hype' ? null : detectImport(cfg.script)
+  if (imported) {
+    // imported docs can carry streamer/game and a cast of users
+    cfg = { ...cfg }
+    if (imported.streamer && (!cfg.streamerName.trim() || cfg.streamerName === 'Streamer')) cfg.streamerName = imported.streamer
+    if (imported.game && (!cfg.gameName.trim() || cfg.gameName === 'the game')) cfg.gameName = imported.game
+    const names = importedNames(imported)
+    if (names.length) cfg.customNames = [names.join(', '), cfg.customNames].filter(Boolean).join(', ')
+  }
   const streamerDisplay = cfg.streamerName.trim() || 'Streamer'
   const streamerLogin = (cfg.streamerLogin.trim() || streamerDisplay).toLowerCase().replace(/[^a-z0-9_]/g, '_')
   const badgeOpts: BadgeAssignOptions = {
@@ -113,6 +124,11 @@ export function buildTimeline(inputs: SimInputs): Timeline {
     let prev = cfg.startDelayMs
     let first = true
     for (const e of entries) {
+      if (e.type === 'user' || e.type === 'setuser') {
+        // cast definitions don't take time
+        applyScriptEntry(ctx, e, prev, messages, clears)
+        continue
+      }
       let t: number
       if (e.timing.kind === 'at') t = e.timing.sec * 1000
       else if (e.timing.kind === 'after') t = prev + e.timing.sec * 1000
@@ -633,6 +649,7 @@ function applyScriptEntry(ctx: Ctx, e: ScriptEntry, t: number, out: ChatMessage[
       const target = resolveUser(ctx, e.target)
       const orig = [...ctx.recent].reverse().find((m) => m.user === target && !m.notice)
       const replier = e.user ? resolveUser(ctx, e.user) : pickChatter(ctx, target)
+      ctx.lastScriptUser = replier
       const m = makeMessage(ctx, t, replier, fill(ctx, e.text), { reply: { displayName: target.displayName, text: orig?.text ?? '' } })
       push(m)
       break
@@ -686,6 +703,19 @@ function applyScriptEntry(ctx: Ctx, e: ScriptEntry, t: number, out: ChatMessage[
         u.isMod = false
         applyFlags(ctx, u, {})
       } else applyFlags(ctx, u, e.flags)
+      break
+    }
+    case 'user': {
+      // "Display (login)" or plain name
+      const m = e.user.match(/^(.+?)\s*\((\S+)\)$/)
+      const u = resolveUser(ctx, m ? m[2] : e.user, e.flags)
+      if (m) u.displayName = m[1].trim()
+      else if (u.displayName.toLowerCase() === u.login && e.user !== e.user.toLowerCase()) u.displayName = e.user
+      // named cast members should show up as random chatters too
+      if (u.weight === 0) {
+        u.weight = 0.6
+        ctx.weights[ctx.chatters.indexOf(u)] = u.weight
+      }
       break
     }
     case 'wait':

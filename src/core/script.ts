@@ -28,6 +28,8 @@
  *   !mod user | !vip user | !unmod user | !color user #hex
  */
 
+import { detectImport, importToScript } from './importFormat'
+
 export type ScriptTiming = { kind: 'auto' } | { kind: 'at'; sec: number } | { kind: 'after'; sec: number }
 
 export interface UserFlags {
@@ -54,6 +56,7 @@ export type ScriptEntry =
   | { type: 'raid'; timing: ScriptTiming; raider?: string; count: number }
   | { type: 'announce'; timing: ScriptTiming; color: string; text: string }
   | { type: 'reply'; timing: ScriptTiming; target: string; text: string; user?: string }
+  | { type: 'user'; timing: ScriptTiming; user: string; flags: UserFlags }
   | { type: 'timeout'; timing: ScriptTiming; user: string; seconds: number }
   | { type: 'system'; timing: ScriptTiming; kind: 'clear' | 'slow' | 'slowoff' | 'emoteonly' | 'emoteonlyoff' | 'followers' | 'subsonly' | 'text'; value?: number; text?: string }
   | { type: 'burst'; timing: ScriptTiming; count: number; text: string }
@@ -105,8 +108,11 @@ function parseTier(s?: string): 'prime' | 1 | 2 | 3 | undefined {
   return undefined
 }
 
-export function parseScript(src: string): ScriptEntry[] {
+export function parseScript(srcRaw: string): ScriptEntry[] {
   const out: ScriptEntry[] = []
+  // JSON import format pasted straight into the script box
+  const doc = detectImport(srcRaw)
+  const src = doc ? importToScript(doc) : srcRaw
   for (const rawLine of src.split(/\r?\n/)) {
     let line = rawLine.trim()
     if (!line || line.startsWith('#') || line.startsWith('//')) continue
@@ -174,8 +180,25 @@ export function parseScript(src: string): ScriptEntry[] {
           break
         }
         case 'reply': {
+          // "!reply target: text"  or  "!reply target | replier: text"
+          const m2 = arg.match(/^(\S+)\s*\|\s*(.+)$/)
+          if (m2) {
+            const su = splitUser(m2[2])
+            out.push({ type: 'reply', timing, target: m2[1], text: su.text, user: su.user })
+            break
+          }
           const su = splitUser(arg)
           if (su.user) out.push({ type: 'reply', timing, target: su.user, text: su.text })
+          break
+        }
+        case 'user': case 'chatter': case 'define': {
+          // "!user name [mod sub:12 color:#hex]"  or  "!user Display (login) mod vip"
+          const m2 = arg.match(/^(.+?\(\S+\)|\S+)\s*(.*)$/)
+          if (!m2) break
+          const name = m2[1]
+          const rest = m2[2].trim()
+          const { flags } = parseFlags(rest.startsWith('[') ? rest : rest ? `[${rest}]` : '')
+          out.push({ type: 'user', timing, user: name, flags })
           break
         }
         case 'me': case 'action': {

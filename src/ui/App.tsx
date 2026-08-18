@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useConfig, useSimConfig, encodeShare } from './useConfig'
 import { Preview, Transport, usePlayer } from './Preview'
-import { ContentPanel } from './panels/ContentPanel'
-import { ChattersPanel } from './panels/ChattersPanel'
-import { LookPanel } from './panels/LookPanel'
-import { TimingPanel } from './panels/TimingPanel'
+import { ChatPanel } from './panels/ChatPanel'
+import { StylePanel } from './panels/StylePanel'
 import { ExportPanel } from './panels/ExportPanel'
 import { HelpPanel } from './panels/HelpPanel'
 import { AssetCache } from '../core/assets'
@@ -20,7 +18,7 @@ import { makeFrameSource } from '../export/exporter'
 import { collectAssetUrls } from '../core/renderer'
 import { styleFromConfig } from '../core/layout'
 
-const TABS = ['Content', 'Chatters', 'Look', 'Timing', 'Export', 'Help'] as const
+const TABS = ['Chat', 'Style', 'Export', 'Help'] as const
 type Tab = (typeof TABS)[number]
 
 const assets = new AssetCache()
@@ -28,10 +26,10 @@ const assets = new AssetCache()
 
 export default function App() {
   const { cfg, set, patch, reset, setCfg } = useConfig()
-  const [tab, setTab] = useState<Tab>('Content')
+  const [tab, setTab] = useState<Tab>('Chat')
   const [channel, setChannel] = useState<ChannelData | null>(null)
   const [fontsReady, setFontsReady] = useState(false)
-  const [zoom, setZoom] = useState<number | 'fit'>('fit')
+  const [zoom, setZoom] = useState<number | 'fit' | 'auto'>('auto')
 
   useEffect(() => {
     ensureFonts().then(() => setFontsReady(true))
@@ -131,10 +129,14 @@ export default function App() {
     <div className="app">
       <header className="top">
         <div className="brand">
-          <span className="logo">▮</span> TwitchSim <span className="sub">chat simulator & video exporter</span>
+          <span className="logo" aria-hidden>
+            <svg width="20" height="20" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#9147ff" /><path d="M9 7h15v11l-5 5h-4l-3 3v-3H9z" fill="#fff" /><rect x="15" y="11" width="2" height="5" fill="#9147ff" /><rect x="19" y="11" width="2" height="5" fill="#9147ff" /></svg>
+          </span>
+          TwitchSim <span className="sub">fake Twitch chat → transparent video</span>
         </div>
         <div className="topbtns">
-          <select value={String(zoom)} onChange={(e) => setZoom(e.target.value === 'fit' ? 'fit' : parseFloat(e.target.value))} title="Preview zoom">
+          <select value={String(zoom)} onChange={(e) => setZoom(e.target.value === 'fit' || e.target.value === 'auto' ? (e.target.value as 'fit' | 'auto') : parseFloat(e.target.value))} title="Preview zoom">
+            <option value="auto">Auto</option>
             <option value="fit">Fit</option>
             <option value="0.5">50%</option>
             <option value="1">100%</option>
@@ -162,10 +164,8 @@ export default function App() {
             ))}
           </nav>
           <div className="panel-body">
-            {tab === 'Content' && <ContentPanel cfg={cfg} set={set} patch={patch} />}
-            {tab === 'Chatters' && <ChattersPanel cfg={cfg} set={set} patch={patch} channel={channel} setChannel={setChannel} />}
-            {tab === 'Look' && <LookPanel cfg={cfg} set={set} patch={patch} />}
-            {tab === 'Timing' && <TimingPanel cfg={cfg} set={set} />}
+            {tab === 'Chat' && <ChatPanel cfg={cfg} set={set} />}
+            {tab === 'Style' && <StylePanel cfg={cfg} set={set} patch={patch} channel={channel} setChannel={setChannel} />}
             {tab === 'Export' && <ExportPanel cfg={cfg} set={set} patch={patch} timeline={timeline} assets={assets} />}
             {tab === 'Help' && <HelpPanel />}
           </div>

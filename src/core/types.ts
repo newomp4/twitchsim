@@ -117,7 +117,7 @@ export interface ChatMessage {
   }
 }
 
-export type AnimationStyle = 'instant' | 'slide' | 'fade' | 'slide-fade'
+export type AnimationStyle = 'instant' | 'slide-up' | 'slide-left' | 'slide-right' | 'fade' | 'pop' | 'slide-fade' | 'slide'
 export type ChatStyle = 'twitch-dark' | 'twitch-light' | 'transparent' | 'custom'
 export type FontSizePreset = 'small' | 'default' | 'large' | 'xlarge'
 export type ContentMode = 'script' | 'ambient' | 'mixed' | 'hype'

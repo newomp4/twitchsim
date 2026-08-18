@@ -27,6 +27,42 @@ interface CacheEntry {
 function easeOutCubic(x: number): number {
   return 1 - Math.pow(1 - x, 3)
 }
+function easeOutBack(x: number): number {
+  const c1 = 1.70158
+  const c3 = c1 + 1
+  return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2)
+}
+
+/** Per-row entry transform for the animated message. */
+export interface RowAnim {
+  /** fraction of the row height already allotted in the stack (older rows move up smoothly) */
+  grow: number
+  alpha: number
+  dx: number
+  scale: number
+}
+
+export function rowAnimation(style: AnimationStyle, age: number, animMs: number, width: number): RowAnim {
+  if (style === 'instant' || age >= animMs) return { grow: 1, alpha: 1, dx: 0, scale: 1 }
+  const t = Math.max(0, age) / animMs
+  const p = easeOutCubic(t)
+  switch (style) {
+    case 'slide':
+    case 'slide-up':
+      return { grow: p, alpha: 1, dx: 0, scale: 1 }
+    case 'slide-fade':
+      return { grow: p, alpha: p, dx: 0, scale: 1 }
+    case 'fade':
+      return { grow: Math.min(1, t * 3), alpha: p, dx: 0, scale: 1 }
+    case 'slide-left':
+      return { grow: p, alpha: Math.min(1, t * 2), dx: -width * (1 - p), scale: 1 }
+    case 'slide-right':
+      return { grow: p, alpha: Math.min(1, t * 2), dx: width * (1 - p), scale: 1 }
+    case 'pop':
+      return { grow: p, alpha: Math.min(1, t * 2.5), dx: 0, scale: 0.7 + 0.3 * easeOutBack(t) }
+  }
+  return { grow: 1, alpha: 1, dx: 0, scale: 1 }
+}
 
 const pathCache = new Map<string, Path2D>()
 function path(d: string): Path2D {
@@ -111,30 +147,32 @@ export class ChatRenderer {
     let yBottom = H - s.paddingBottom
     const animMs = Math.max(1, o.animationMs)
     // draw newest first (bottom) going up
-    const toDraw: { layout: RowLayout; y: number; alpha: number }[] = []
+    const toDraw: { layout: RowLayout; y: number; anim: RowAnim }[] = []
     let idx = hi - 1
     while (idx >= 0 && yBottom > -50) {
       const m = msgs[idx]
       idx--
       if (m.t < clearT && !(m.notice?.kind === 'clear')) continue
       const layout = this.layoutFor(m, o, tMs, idx + 1)
-      let g = 1
-      let alpha = 1
-      const age = tMs - m.t
-      if (o.animation !== 'instant' && age < animMs) {
-        const p = easeOutCubic(Math.max(0, age) / animMs)
-        if (o.animation === 'slide' || o.animation === 'slide-fade') g = p
-        if (o.animation === 'fade' || o.animation === 'slide-fade') alpha = p
-      }
-      const allotted = layout.height * g
+      const anim = rowAnimation(o.animation, tMs - m.t, animMs, W)
+      const allotted = layout.height * anim.grow
       const yTop = yBottom - allotted
-      toDraw.push({ layout, y: yTop, alpha })
+      toDraw.push({ layout, y: yTop, anim })
       yBottom = yTop
     }
     // draw oldest first so newer rows paint over overlapping emote overflow naturally
     for (let i = toDraw.length - 1; i >= 0; i--) {
       const d = toDraw[i]
-      this.drawRow(ctx, d.layout, 0, d.y, W, d.alpha, tMs, o)
+      const a = d.anim
+      if (a.dx !== 0 || a.scale !== 1) {
+        ctx.save()
+        const cy = d.y + d.layout.height / 2
+        ctx.translate(a.dx, cy)
+        ctx.scale(a.scale, a.scale)
+        ctx.translate(0, -cy)
+        this.drawRow(ctx, d.layout, 0, d.y, W, a.alpha, tMs, o)
+        ctx.restore()
+      } else this.drawRow(ctx, d.layout, 0, d.y, W, a.alpha, tMs, o)
     }
 
     // top fade
