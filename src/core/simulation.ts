@@ -78,6 +78,7 @@ export function buildTimeline(inputs: SimInputs): Timeline {
   const streamerDisplay = cfg.streamerName.trim() || 'Streamer'
   const streamerLogin = (cfg.streamerLogin.trim() || streamerDisplay).toLowerCase().replace(/[^a-z0-9_]/g, '_')
   const badgeOpts: BadgeAssignOptions = {
+    pool: cfg.badgePool,
     subRatio: cfg.subRatio,
     primeRatio: cfg.primeRatio,
     bitsBadgeRatio: cfg.bitsBadgeRatio,

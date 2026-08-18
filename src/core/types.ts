@@ -180,6 +180,8 @@ export interface Config {
   bitsBadgeRatio: number
   gifterBadgeRatio: number
   eventBadgeRatio: number
+  /** which badge groups random chatters may wear (see BADGE_GROUPS); empty = none */
+  badgePool: string[]
   botsEnabled: boolean
   customNames: string
   customNamesOnly: boolean

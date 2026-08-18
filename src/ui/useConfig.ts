@@ -89,7 +89,7 @@ const SIM_KEYS: (keyof Config)[] = [
   'seed', 'mode', 'script', 'mood', 'streamerName', 'streamerLogin', 'viewerName', 'gameName', 'scriptUsersRandom', 'scriptGapMultiplier', 'streamerChats', 'streamerColor',
   'messagesPerMinute', 'pacing', 'burstiness', 'reactionMoments', 'startDelayMs', 'prefillSec', 'durationSec', 'durationAuto', 'tailSec',
   'subsRate', 'giftsRate', 'raidsRate', 'cheersRate', 'firstTimeRate', 'highlightRate', 'replyRate', 'deleteRate', 'announcementRate', 'actionsRate', 'mentionsRate', 'powerUpsRate', 'rewardRate', 'systemNotices', 'welcomeMessage',
-  'chatterPoolSize', 'customColorRatio', 'subRatio', 'primeRatio', 'modCount', 'vipCount', 'bitsBadgeRatio', 'gifterBadgeRatio', 'eventBadgeRatio', 'botsEnabled', 'customNames', 'customNamesOnly', 'localizedNamesRatio', 'channelSubBadgeStyle', 'customBadges', 'customEmotes', 'useCustomEmotesInFiller',
+  'chatterPoolSize', 'customColorRatio', 'subRatio', 'primeRatio', 'modCount', 'vipCount', 'bitsBadgeRatio', 'gifterBadgeRatio', 'eventBadgeRatio', 'badgePool', 'botsEnabled', 'customNames', 'customNamesOnly', 'localizedNamesRatio', 'channelSubBadgeStyle', 'customBadges', 'customEmotes', 'useCustomEmotesInFiller',
   'emoteDensity', 'useTwitchEmotes', 'use7tvEmotes', 'useChannelEmotes', 'animatedEmotes',
 ]
 export function simKey(cfg: Config): string {

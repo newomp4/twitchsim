@@ -321,7 +321,47 @@ const EVENT_BADGE_WEIGHTS = [
   3, 2, 1, 1,
 ]
 
+/** Badge groups the user can switch on/off for random chatters. */
+export const BADGE_GROUPS: { key: string; label: string }[] = [
+  { key: 'moderator', label: 'Moderator' },
+  { key: 'vip', label: 'VIP' },
+  { key: 'broadcaster', label: 'Broadcaster' },
+  { key: 'subscriber', label: 'Subscriber' },
+  { key: 'founder', label: 'Founder' },
+  { key: 'premium', label: 'Prime' },
+  { key: 'turbo', label: 'Turbo' },
+  { key: 'partner', label: 'Verified' },
+  { key: 'bits', label: 'Bits' },
+  { key: 'sub-gifter', label: 'Sub gifter' },
+  { key: 'hype-train', label: 'Hype train' },
+  { key: 'predictions', label: 'Predictions' },
+  { key: 'events', label: 'Event badges (Recap, TwitchCon…)' },
+  { key: 'no_av', label: 'No audio / video' },
+]
+export const ALL_BADGE_GROUPS = BADGE_GROUPS.map((g) => g.key)
+
+/** Maps a badge set id to its pool group. */
+export function badgeGroup(set: string): string {
+  if (set.startsWith('custom:')) return 'custom'
+  switch (set) {
+    case 'moderator': case 'vip': case 'broadcaster': case 'subscriber': case 'founder': case 'premium': case 'turbo': case 'partner': case 'hype-train': case 'predictions':
+      return set
+    case 'bits': case 'bits-leader':
+      return 'bits'
+    case 'sub-gifter': case 'sub-gift-leader':
+      return 'sub-gifter'
+    case 'no_audio': case 'no_video':
+      return 'no_av'
+    case 'staff': case 'admin': case 'global_mod':
+      return 'moderator'
+    default:
+      return 'events'
+  }
+}
+
 export interface BadgeAssignOptions {
+  /** allowed groups for randomly assigned badges (undefined = all) */
+  pool?: string[]
   subRatio: number
   primeRatio: number
   bitsBadgeRatio: number
@@ -340,7 +380,7 @@ export function assignBadges(rng: Rng, c: Chatter, o: BadgeAssignOptions): void 
   else if (c.isMod) badges.push(makeBadge('moderator', '1'))
   else if (c.isVip) badges.push(makeBadge('vip', '1'))
   if (c.isBot) {
-    c.badges = badges
+    c.badges = filterPool(badges, o.pool)
     return
   }
   // subscriber (mods/vips are much more likely to be subs)
@@ -383,7 +423,16 @@ export function assignBadges(rng: Rng, c: Chatter, o: BadgeAssignOptions): void 
   } else if (rng.chance(0.02)) badges.push(makeBadge('turbo', '1'))
   if (rng.chance(0.004)) badges.push(makeBadge('partner', '1'))
   if (rng.chance(0.01)) badges.push(makeBadge(rng.chance(0.5) ? 'no_audio' : 'no_video', '1'))
-  c.badges = sortBadges(badges)
+  c.badges = sortBadges(filterPool(badges, o.pool))
+}
+
+export function filterPool(badges: Badge[], pool?: string[]): Badge[] {
+  if (!pool) return badges
+  const allowed = new Set(pool)
+  return badges.filter((b) => {
+    const g = badgeGroup(b.set)
+    return g === 'custom' || allowed.has(g)
+  })
 }
 
 export function subBadgeFor(months: number, o: BadgeAssignOptions): Badge {

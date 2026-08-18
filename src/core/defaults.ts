@@ -59,6 +59,7 @@ export const DEFAULT_CONFIG: Config = {
   bitsBadgeRatio: 0.12,
   gifterBadgeRatio: 0.1,
   eventBadgeRatio: 0.35,
+  badgePool: ['moderator', 'vip', 'broadcaster', 'subscriber', 'founder', 'premium', 'turbo', 'partner', 'bits', 'sub-gifter', 'hype-train', 'predictions', 'events', 'no_av'],
   botsEnabled: true,
   customNames: '',
   customNamesOnly: false,

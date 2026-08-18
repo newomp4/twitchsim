@@ -4,6 +4,7 @@ import type { ChannelData } from '../../core/channel'
 import { loadChannel } from '../../core/channel'
 import { Section, Slider, Toggle, Row, Segmented, ColorInput, NumberInput, Select, Field, Collapsible, TextInput } from '../controls'
 import { CustomIcons } from './CustomIcons'
+import { BADGE_GROUPS, ALL_BADGE_GROUPS } from '../../core/badges'
 
 export function StylePanel({
   cfg,
@@ -102,6 +103,29 @@ export function StylePanel({
           <Toggle label="Badges" value={cfg.showBadges} onChange={(v) => set('showBadges', v)} />
           <Toggle label="Timestamps" value={cfg.timestamps} onChange={(v) => set('timestamps', v)} />
         </Row>
+        {cfg.showBadges && (
+          <Field label="Badges random chatters may wear" hint="Turn groups off to simulate a chat with only a couple of icons. Badges you write explicitly in your lines ([mod], [sub]…) and your uploaded extras are unaffected.">
+            <div className="chips">
+              {BADGE_GROUPS.map((g) => {
+                const on = cfg.badgePool.includes(g.key)
+                return (
+                  <button key={g.key} type="button" className={'chip' + (on ? ' on' : '')} onClick={() => set('badgePool', on ? cfg.badgePool.filter((k) => k !== g.key) : [...cfg.badgePool, g.key])}>
+                    {g.label}
+                  </button>
+                )
+              })}
+              <button type="button" className="chip ghost" onClick={() => set('badgePool', ALL_BADGE_GROUPS)}>
+                all
+              </button>
+              <button type="button" className="chip ghost" onClick={() => set('badgePool', [])}>
+                none
+              </button>
+              <button type="button" className="chip ghost" onClick={() => set('badgePool', ['moderator', 'vip', 'subscriber'])}>
+                mod / vip / sub only
+              </button>
+            </div>
+          </Field>
+        )}
         <Row>
           <Toggle label="Twitch global emotes" value={cfg.useTwitchEmotes} onChange={(v) => set('useTwitchEmotes', v)} />
           <Toggle label="7TV emotes (KEKW, OMEGALUL…)" value={cfg.use7tvEmotes} onChange={(v) => set('use7tvEmotes', v)} />
