@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Section, Collapsible } from '../controls'
+import { Section, Collapsible, copyText } from '../controls'
 import { AI_PROMPT } from '../../core/importFormat'
 
 const EXAMPLE_JSON = `{
@@ -27,12 +27,9 @@ const EXAMPLE_JSON = `{
 export function HelpPanel() {
   const [copied, setCopied] = useState(false)
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(AI_PROMPT)
+    if (await copyText(AI_PROMPT)) {
       setCopied(true)
       setTimeout(() => setCopied(false), 1800)
-    } catch {
-      prompt('Copy this prompt', AI_PROMPT)
     }
   }
   return (

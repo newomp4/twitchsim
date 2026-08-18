@@ -3,7 +3,7 @@ import type { Config, Mood } from '../../core/types'
 import { detectImport } from '../../core/importFormat'
 import { AI_PROMPT } from '../../core/importFormat'
 import { SAMPLE_SCRIPT } from '../../core/defaults'
-import { Section, Field, Select, TextInput, Toggle, Slider, Segmented, Row, Collapsible, NumberInput } from '../controls'
+import { Section, Field, Select, TextInput, Toggle, Slider, Segmented, Row, Collapsible, NumberInput, copyText } from '../controls'
 
 const MOODS: { value: Mood; label: string }[] = [
   { value: 'gaming', label: 'Gaming / backseat' },
@@ -37,12 +37,9 @@ export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Con
     if (cfg.mode === 'ambient') set('mode', 'mixed')
   }
   const copyPrompt = async () => {
-    try {
-      await navigator.clipboard.writeText(AI_PROMPT)
+    if (await copyText(AI_PROMPT)) {
       setCopied(true)
       setTimeout(() => setCopied(false), 1800)
-    } catch {
-      prompt('Copy this prompt', AI_PROMPT)
     }
   }
 

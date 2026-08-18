@@ -633,13 +633,13 @@ function applyScriptEntry(ctx: Ctx, e: ScriptEntry, t: number, out: ChatMessage[
         push(giftNotice(ctx, tt, gifter, recipient, e.tier))
         tt += rng.int(60, 220)
       }
-      spawnReaction(ctx, t + 800, 'gifted', out, gifter)
+      if (cfg.mode !== 'script') spawnReaction(ctx, t + 800, 'gifted', out, gifter)
       break
     }
     case 'raid': {
       const raider = resolveUser(ctx, e.raider)
       push(raidNotice(ctx, t, raider, e.count))
-      spawnRaid(ctx, t, e.count, out, raider)
+      spawnRaid(ctx, t, e.count, out, raider, cfg.mode !== 'script')
       break
     }
     case 'announce':
@@ -708,7 +708,16 @@ function applyScriptEntry(ctx: Ctx, e: ScriptEntry, t: number, out: ChatMessage[
     case 'user': {
       // "Display (login)" or plain name
       const m = e.user.match(/^(.+?)\s*\((\S+)\)$/)
-      const u = resolveUser(ctx, m ? m[2] : e.user, e.flags)
+      const u = resolveUser(ctx, m ? m[2] : e.user)
+      // an explicit definition means "exactly these badges" (no random extras)
+      u.badges = []
+      u.isMod = false
+      u.isVip = false
+      u.isPrime = false
+      u.subMonths = 0
+      u.subTier = 0
+      applyFlags(ctx, u, e.flags)
+      if (e.flags.color) u.color = e.flags.color
       if (m) u.displayName = m[1].trim()
       else if (u.displayName.toLowerCase() === u.login && e.user !== e.user.toLowerCase()) u.displayName = e.user
       // named cast members should show up as random chatters too
@@ -962,7 +971,7 @@ function spawnReaction(ctx: Ctx, t: number, kind: 'sub' | 'gifted' | 'raid', out
   }
 }
 
-function spawnRaid(ctx: Ctx, t: number, count: number, out: ChatMessage[], raidingStreamer?: Chatter): void {
+function spawnRaid(ctx: Ctx, t: number, count: number, out: ChatMessage[], raidingStreamer?: Chatter, withReactions = true): void {
   const { rng } = ctx
   const raiders: Chatter[] = []
   const n = Math.min(60, Math.max(4, Math.round(Math.sqrt(count) * 1.5)))
@@ -976,7 +985,7 @@ function spawnRaid(ctx: Ctx, t: number, count: number, out: ChatMessage[], raidi
     tt += rng.exp(4500 / n)
   }
   ;(ctx.raidWindows ??= []).push({ t0: t, t1: t + 90000, users: raiders })
-  spawnReaction(ctx, t + 1500, 'raid', out, raidingStreamer)
+  if (withReactions) spawnReaction(ctx, t + 1500, 'raid', out, raidingStreamer)
 }
 
 export function timelineStats(tl: Timeline): { messages: number; chatters: number; notices: number } {
