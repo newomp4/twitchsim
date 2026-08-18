@@ -25,7 +25,8 @@ export async function exportWithMediabunny(a: MediabunnyArgs): Promise<ExportRes
   let writable: FileSystemWritableFileStream | null = null
   if (fileHandle) writable = await fileHandle.createWritable()
   const target = writable ? new StreamTarget(writable as unknown as WritableStream<{ type: 'write'; data: Uint8Array<ArrayBuffer>; position: number }>, { chunked: true }) : new BufferTarget()
-  const format = a.container === 'mp4' ? new Mp4OutputFormat({ fastStart: writable ? 'reserve' : 'in-memory' }) : new WebMOutputFormat()
+  // when streaming to disk the index (moov) is written at the end — no need to reserve space up front
+  const format = a.container === 'mp4' ? new Mp4OutputFormat({ fastStart: writable ? false : 'in-memory' }) : new WebMOutputFormat()
   const output = new Output({ format, target })
   const pixels = outW * outH
   // generous bitrate: chat text needs crisp edges

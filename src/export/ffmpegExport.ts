@@ -53,7 +53,7 @@ export async function exportProRes(a: CommonExportArgs): Promise<ExportResult> {
   let writable: FileSystemWritableFileStream | null = null
   if (fileHandle) writable = await fileHandle.createWritable()
   const target = writable ? new StreamTarget(writable as unknown as WritableStream<{ type: 'write'; data: Uint8Array<ArrayBuffer>; position: number }>, { chunked: true }) : new BufferTarget()
-  const output = new Output({ format: new MovOutputFormat({ fastStart: writable ? 'reserve' : 'in-memory' }), target })
+  const output = new Output({ format: new MovOutputFormat({ fastStart: writable ? false : 'in-memory' }), target })
   const packetSource = new EncodedVideoPacketSource('prores')
   output.addVideoTrack(packetSource, { frameRate: fps, maximumPacketCount: Math.ceil(total * 1.34) + 16 })
   await output.start()
