@@ -83,8 +83,9 @@ export function buildTimeline(inputs: SimInputs): Timeline {
     bitsBadgeRatio: cfg.bitsBadgeRatio,
     gifterBadgeRatio: cfg.gifterBadgeRatio,
     eventBadgeRatio: cfg.eventBadgeRatio,
-    subBadgeSet: cfg.channelSubBadgeStyle === 'generated' ? inputs.subBadgeSet : null,
+    subBadgeSet: cfg.channelSubBadgeStyle === 'generated' || cfg.channelSubBadgeStyle === 'custom' ? inputs.subBadgeSet : null,
     channelBadges: cfg.channelSubBadgeStyle === 'channel' ? inputs.channelBadges : null,
+    extraBadges: cfg.customBadges.filter((b) => b.kind === 'extra').map((b) => ({ id: b.id, name: b.name, url: b.src, ratio: b.ratio ?? 0.2 })),
   }
   const ctx: Ctx = {
     rng,

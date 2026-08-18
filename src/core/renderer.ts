@@ -90,7 +90,7 @@ export class ChatRenderer {
 
   private styleKey(o: RenderOptions): string {
     const s = o.style
-    return [s.width, s.fontSize, s.lineHeight, s.fontFamily, s.theme, s.timestamps, s.showBadges, s.boldNames, s.readableColors, s.alternateBg, s.padX, s.modView, s.hypeTrain, o.hiRes, s.transparent].join('|')
+    return [s.width, s.fontSize, s.lineHeight, s.fontFamily, s.theme, s.timestamps, s.showBadges, s.boldNames, s.readableColors, s.alternateBg, s.padX, s.modView, s.hypeTrain, o.hiRes, s.transparent, s.badgeRadius, Object.keys(s.badgeOverrides).join(',')].join('|')
   }
 
   layoutFor(msg: ChatMessage, o: RenderOptions, tNow: number, index: number): RowLayout {
@@ -359,7 +359,15 @@ export class ChatRenderer {
     const prevAlpha = ctx.globalAlpha
     if (a.alpha !== undefined) ctx.globalAlpha = prevAlpha * a.alpha
     try {
-      ctx.drawImage(src, dx, dy, dw, dh)
+      if (a.round && a.round > 0) {
+        // uploaded badge: round the corners at draw time
+        ctx.save()
+        ctx.beginPath()
+        ctx.roundRect(dx, dy, dw, dh, Math.min(dw, dh) * Math.min(0.5, a.round))
+        ctx.clip()
+        ctx.drawImage(src, dx, dy, dw, dh)
+        ctx.restore()
+      } else ctx.drawImage(src, dx, dy, dw, dh)
     } catch {
       /* image may not be decodable yet */
     }
@@ -445,6 +453,11 @@ export function collectAssetUrls(tl: Timeline, hiRes: boolean, style: RenderStyl
   for (const m of tl.messages) {
     if (m.user && style.showBadges) {
       for (const b of m.user.badges) {
+        const ov = style.badgeOverrides[b.set]
+        if (ov) {
+          urls.add(ov)
+          continue
+        }
         const u = hiRes ? (b.url4x ?? b.url) : b.url
         if (u) urls.add(u)
         else {

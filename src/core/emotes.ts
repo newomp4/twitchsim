@@ -106,6 +106,11 @@ export const TWITCH_GLOBAL_EMOTES: EmoteDef[] = (twitchEmotesJson as RawEmote[])
   weight: POPULARITY[e.name] ?? 1,
 }))
 
+/** Builds emote defs from user uploads (data URLs). */
+export function customEmoteDefs(list: { id: string; name: string; src: string; animated: boolean }[], weight = 6): EmoteDef[] {
+  return list.filter((e) => e.name).map((e) => ({ name: e.name, id: 'custom:' + e.id, provider: 'custom' as EmoteProvider, animated: e.animated, url: e.src, weight }))
+}
+
 export const SEVENTV_EMOTES: EmoteDef[] = (seventvEmotesJson as RawEmote[]).map((e) => ({
   name: e.name,
   id: e.id,

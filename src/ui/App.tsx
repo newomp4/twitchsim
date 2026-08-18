@@ -6,7 +6,7 @@ import { StylePanel } from './panels/StylePanel'
 import { ExportPanel } from './panels/ExportPanel'
 import { HelpPanel } from './panels/HelpPanel'
 import { AssetCache } from '../core/assets'
-import { EmoteRegistry, TWITCH_GLOBAL_EMOTES, SEVENTV_EMOTES } from '../core/emotes'
+import { EmoteRegistry, TWITCH_GLOBAL_EMOTES, SEVENTV_EMOTES, customEmoteDefs } from '../core/emotes'
 import { buildTimeline } from '../core/simulation'
 import { generateSubBadgeSet } from '../core/badges'
 import { Rng } from '../core/rng'
@@ -44,12 +44,22 @@ export default function App() {
   const simCfg = useSimConfig(cfg)
   const registry = useMemo(() => {
     const sets = []
+    if (simCfg.customEmotes.length) sets.push(customEmoteDefs(simCfg.customEmotes, simCfg.useCustomEmotesInFiller ? 8 : 0))
     if (simCfg.useTwitchEmotes) sets.push(TWITCH_GLOBAL_EMOTES)
     if (simCfg.use7tvEmotes) sets.push(SEVENTV_EMOTES)
     if (simCfg.useChannelEmotes && channel) sets.unshift(channel.emotes)
     return new EmoteRegistry(sets, simCfg.animatedEmotes)
-  }, [simCfg.useTwitchEmotes, simCfg.use7tvEmotes, simCfg.useChannelEmotes, simCfg.animatedEmotes, channel])
-  const subBadgeSet = useMemo(() => generateSubBadgeSet(new Rng(simCfg.seed + ':badges')), [simCfg.seed])
+  }, [simCfg.useTwitchEmotes, simCfg.use7tvEmotes, simCfg.useChannelEmotes, simCfg.animatedEmotes, simCfg.customEmotes, simCfg.useCustomEmotesInFiller, channel])
+  const subBadgeSet = useMemo(() => {
+    if (simCfg.channelSubBadgeStyle === 'custom') {
+      const tiers = simCfg.customBadges
+        .filter((b) => b.kind === 'sub')
+        .map((b) => ({ months: b.months ?? 0, url: b.src, title: b.name || 'Subscriber', roundable: true }))
+        .sort((a, b) => a.months - b.months)
+      return { tiers }
+    }
+    return generateSubBadgeSet(new Rng(simCfg.seed + ':badges'))
+  }, [simCfg.seed, simCfg.channelSubBadgeStyle, simCfg.customBadges])
   const timeline = useMemo(
     () =>
       buildTimeline({

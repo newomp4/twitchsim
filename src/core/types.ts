@@ -1,3 +1,5 @@
+import type { CustomBadge, CustomEmote } from './customAssets'
+
 export type Theme = 'dark' | 'light'
 
 export interface Badge {
@@ -10,6 +12,8 @@ export interface Badge {
   url?: string
   /** 4x url override */
   url4x?: string
+  /** user-uploaded image: corners get rounded at draw time */
+  roundable?: boolean
 }
 
 export interface Chatter {
@@ -180,8 +184,15 @@ export interface Config {
   customNames: string
   customNamesOnly: boolean
   localizedNamesRatio: number
-  channelSubBadgeStyle: 'default' | 'generated' | 'channel'
+  channelSubBadgeStyle: 'default' | 'generated' | 'channel' | 'custom'
   loadedChannel: string
+  /** uploaded badge images (see customAssets.ts) */
+  customBadges: CustomBadge[]
+  customEmotes: CustomEmote[]
+  /** corner radius for uploaded badges, as a fraction of the badge size (0 = square, 0.5 = circle) */
+  badgeRadius: number
+  badgeFit: 'cover' | 'contain'
+  useCustomEmotesInFiller: boolean
   // emotes
   emoteDensity: number // 0..1
   useTwitchEmotes: boolean

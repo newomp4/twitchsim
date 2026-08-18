@@ -3,6 +3,7 @@ import type { Config } from '../../core/types'
 import type { ChannelData } from '../../core/channel'
 import { loadChannel } from '../../core/channel'
 import { Section, Slider, Toggle, Row, Segmented, ColorInput, NumberInput, Select, Field, Collapsible, TextInput } from '../controls'
+import { CustomIcons } from './CustomIcons'
 
 export function StylePanel({
   cfg,
@@ -111,6 +112,8 @@ export function StylePanel({
         </Row>
       </Section>
 
+      <CustomIcons cfg={cfg} set={set} patch={patch} />
+
       <Collapsible title="Advanced look" hint="readable colors, mod view, alternating rows, padding, font family">
         <Row>
           <Toggle label="Readable colors (Twitch default on)" value={cfg.readableColors} onChange={(v) => set('readableColors', v)} />
@@ -138,6 +141,7 @@ export function StylePanel({
             options={[
               { value: 'generated', label: 'Generated channel set', title: 'A themed set of tiered sub badges made from the seed' },
               { value: 'default', label: 'Twitch default star' },
+              { value: 'custom', label: 'My uploads', title: 'The subscriber badges you uploaded under "Your own icons"' },
               { value: 'channel', label: 'Real channel', title: 'Use the sub badges of the channel loaded below' },
             ]}
           />

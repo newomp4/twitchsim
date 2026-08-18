@@ -138,3 +138,23 @@ kbd { background: var(--card2); border: 1px solid var(--border2); border-radius:
   .stage { min-height: 60vh; }
   body { overflow: auto; }
 }
+
+/* ---------- uploads ---------- */
+.upl-block { border-top: 1px solid var(--border); padding: 8px 0 4px; }
+.upl-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.upl-head b { font-size: 12.5px; }
+.upl-head .hint { margin: 0; flex: 1 1 200px; }
+.upl-head .inline-select { background: var(--panel); border: 1px solid var(--border2); border-radius: 6px; padding: 4px 6px; }
+.upl-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+.upl-item { display: flex; align-items: center; gap: 6px; background: var(--panel); border: 1px solid var(--border2); border-radius: 6px; padding: 4px 6px; }
+.upl-item.wide { flex: 1 1 100%; }
+.upl-item img { width: 28px; height: 28px; object-fit: cover; background: #0e0e10; }
+.upl-item img.emote { object-fit: contain; border-radius: 0; }
+.upl-item label { display: flex; align-items: center; gap: 4px; color: var(--muted2); font-size: 11px; }
+.upl-item input[type=number] { width: 54px; background: var(--card2); border: 1px solid var(--border2); border-radius: 4px; padding: 3px 5px; }
+.upl-item input[type=text] { width: 120px; background: var(--card2); border: 1px solid var(--border2); border-radius: 4px; padding: 3px 5px; }
+.upl-item .ratio { flex: 1; flex-direction: column; align-items: stretch; }
+.upl-item .ratio input { width: 100%; margin: 0; height: 14px; }
+.upl-item .upl-name { font-size: 12px; color: var(--muted); }
+.upl-item .x { border: 0; background: transparent; color: var(--muted2); cursor: pointer; font-size: 16px; line-height: 1; padding: 0 2px; }
+.upl-item .x:hover { color: var(--err); }

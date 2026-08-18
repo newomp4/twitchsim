@@ -136,8 +136,13 @@ const BADGE_ORDER = [
 ]
 const ORDER_INDEX = new Map(BADGE_ORDER.map((s, i) => [s, i]))
 
+function orderOf(set: string): number {
+  if (set.startsWith('custom:')) return (ORDER_INDEX.get('subscriber') ?? 9) + 0.5 // right after the sub badge
+  return ORDER_INDEX.get(set) ?? 900
+}
+
 export function sortBadges(badges: Badge[]): Badge[] {
-  return [...badges].sort((a, b) => (ORDER_INDEX.get(a.set) ?? 900) - (ORDER_INDEX.get(b.set) ?? 900))
+  return [...badges].sort((a, b) => orderOf(a.set) - orderOf(b.set))
 }
 
 export function badgeUrl(b: Badge, scale: 1 | 2 | 4 = 1): string | null {
@@ -222,7 +227,7 @@ const RAMPS: string[][] = [
 
 export interface GeneratedSubBadgeSet {
   /** month threshold -> data url (1x, drawn as 72px SVG for crispness) */
-  tiers: { months: number; url: string; title: string }[]
+  tiers: { months: number; url: string; title: string; roundable?: boolean }[]
 }
 
 /** Builds a themed set of subscriber badges for a fictional channel. */
@@ -324,6 +329,8 @@ export interface BadgeAssignOptions {
   eventBadgeRatio: number
   subBadgeSet: GeneratedSubBadgeSet | null
   channelBadges: Record<string, { version: string; url: string; url4x: string; title: string }[]> | null
+  /** user-uploaded extra badges: id, image, share of chatters wearing it */
+  extraBadges?: { id: string; name: string; url: string; ratio: number }[]
 }
 
 /** Draws a chatter's badge set from Twitch-like probabilities. Mutates the chatter's sub fields too. */
@@ -367,6 +374,9 @@ export function assignBadges(rng: Rng, c: Chatter, o: BadgeAssignOptions): void 
     const versions = Object.keys(GLOBAL_BADGES[set] ?? {})
     if (versions.length) badges.push(makeBadge(set, rng.pick(versions)))
   }
+  for (const x of o.extraBadges ?? []) {
+    if (rng.chance(x.ratio)) badges.push({ set: 'custom:' + x.id, version: '1', title: x.name, url: x.url, url4x: x.url, roundable: true })
+  }
   if (rng.chance(o.primeRatio)) {
     c.isPrime = true
     badges.push(makeBadge('premium', '1'))
@@ -383,10 +393,10 @@ export function subBadgeFor(months: number, o: BadgeAssignOptions): Badge {
     const found = versions.find((x) => x.version === v) ?? versions[0]
     return { set: 'subscriber', version: found.version, title: found.title, url: found.url, url4x: found.url4x }
   }
-  if (o.subBadgeSet) {
+  if (o.subBadgeSet && o.subBadgeSet.tiers.length) {
     let best = o.subBadgeSet.tiers[0]
     for (const t of o.subBadgeSet.tiers) if (t.months <= months) best = t
-    return { set: 'subscriber', version: String(best.months), title: best.title, url: best.url, url4x: best.url }
+    return { set: 'subscriber', version: String(best.months), title: best.title, url: best.url, url4x: best.url, roundable: best.roundable }
   }
   const v = pickTier(Object.keys(GLOBAL_BADGES.subscriber), months)
   return makeBadge('subscriber', v)

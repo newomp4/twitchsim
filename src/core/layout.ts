@@ -32,6 +32,10 @@ export interface RenderStyle {
   modView: boolean
   hypeTrain: boolean
   animatedEmotes: boolean
+  /** corner rounding for uploaded badges (fraction of size) */
+  badgeRadius: number
+  /** uploaded images replacing Twitch badge sets: set -> data url */
+  badgeOverrides: Record<string, string>
 }
 
 export const FONT_PRESETS: Record<Config['fontSize'], { size: number; line: number }> = {
@@ -83,6 +87,8 @@ export function styleFromConfig(cfg: Config): RenderStyle {
     modView: cfg.modView,
     hypeTrain: cfg.hypeTrain,
     animatedEmotes: cfg.animatedEmotes,
+    badgeRadius: cfg.badgeRadius,
+    badgeOverrides: Object.fromEntries(cfg.customBadges.filter((b) => b.kind === 'replace' && b.set).map((b) => [b.set!, b.src])),
   }
 }
 
@@ -172,7 +178,7 @@ export type Atom =
   | { kind: 'text'; text: string; w: number; style: TextStyle; above: number; below: number; body?: boolean }
   | { kind: 'space'; w: number; style: TextStyle; above: number; below: number; body?: boolean }
   | { kind: 'gap'; w: number; body?: boolean }
-  | { kind: 'image'; url: string; urlHi: string; w: number; h: number; boxW: number; above: number; below: number; role: 'emote' | 'badge' | 'cheer' | 'icon'; name: string; fallback?: string; iconColor?: string; iconPath?: string; alpha?: number; body?: boolean }
+  | { kind: 'image'; url: string; urlHi: string; w: number; h: number; boxW: number; above: number; below: number; role: 'emote' | 'badge' | 'cheer' | 'icon'; name: string; fallback?: string; iconColor?: string; iconPath?: string; alpha?: number; body?: boolean; round?: number }
   | { kind: 'group'; atoms: Atom[]; w: number; above: number; below: number }
   | { kind: 'br' }
 
@@ -536,8 +542,9 @@ function chatLineAtoms(msg: ChatMessage, env: LayoutEnv, fm: FontMetrics, delete
   if (style.showBadges) {
     const bsz = 18 * scale
     for (const b of user.badges) {
-      const url = badgeUrl(b, 1) ?? fallbackBadgeUrl(b.set)
-      const urlHi = badgeUrl(b, 4) ?? fallbackBadgeUrl(b.set)
+      const override = style.badgeOverrides[b.set]
+      const url = override ?? badgeUrl(b, 1) ?? fallbackBadgeUrl(b.set)
+      const urlHi = override ?? badgeUrl(b, 4) ?? fallbackBadgeUrl(b.set)
       group.push({
         kind: 'image',
         url,
@@ -551,6 +558,7 @@ function chatLineAtoms(msg: ChatMessage, env: LayoutEnv, fm: FontMetrics, delete
         role: 'badge',
         name: b.title,
         fallback: fallbackBadgeUrl(b.set),
+        round: override || b.roundable ? style.badgeRadius : undefined,
       })
       group.push({ kind: 'gap', w: 3 * scale })
     }

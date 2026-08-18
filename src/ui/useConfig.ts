@@ -19,7 +19,10 @@ function unb64url(s: string): Uint8Array {
 
 export function encodeShare(cfg: Config): string {
   const diff: Partial<Config> = {}
-  for (const k of Object.keys(cfg) as (keyof Config)[]) if (cfg[k] !== DEFAULT_CONFIG[k]) (diff as Record<string, unknown>)[k] = cfg[k]
+  for (const k of Object.keys(cfg) as (keyof Config)[]) {
+    if (k === 'customBadges' || k === 'customEmotes') continue // images don't fit in a URL
+    if (cfg[k] !== DEFAULT_CONFIG[k]) (diff as Record<string, unknown>)[k] = cfg[k]
+  }
   return b64url(deflateSync(strToU8(JSON.stringify(diff)), { level: 9 }))
 }
 export function decodeShare(s: string): Partial<Config> | null {
@@ -86,7 +89,7 @@ const SIM_KEYS: (keyof Config)[] = [
   'seed', 'mode', 'script', 'mood', 'streamerName', 'streamerLogin', 'viewerName', 'gameName', 'scriptUsersRandom', 'scriptGapMultiplier', 'streamerChats', 'streamerColor',
   'messagesPerMinute', 'pacing', 'burstiness', 'reactionMoments', 'startDelayMs', 'prefillSec', 'durationSec', 'durationAuto', 'tailSec',
   'subsRate', 'giftsRate', 'raidsRate', 'cheersRate', 'firstTimeRate', 'highlightRate', 'replyRate', 'deleteRate', 'announcementRate', 'actionsRate', 'mentionsRate', 'powerUpsRate', 'rewardRate', 'systemNotices', 'welcomeMessage',
-  'chatterPoolSize', 'customColorRatio', 'subRatio', 'primeRatio', 'modCount', 'vipCount', 'bitsBadgeRatio', 'gifterBadgeRatio', 'eventBadgeRatio', 'botsEnabled', 'customNames', 'customNamesOnly', 'localizedNamesRatio', 'channelSubBadgeStyle',
+  'chatterPoolSize', 'customColorRatio', 'subRatio', 'primeRatio', 'modCount', 'vipCount', 'bitsBadgeRatio', 'gifterBadgeRatio', 'eventBadgeRatio', 'botsEnabled', 'customNames', 'customNamesOnly', 'localizedNamesRatio', 'channelSubBadgeStyle', 'customBadges', 'customEmotes', 'useCustomEmotesInFiller',
   'emoteDensity', 'useTwitchEmotes', 'use7tvEmotes', 'useChannelEmotes', 'animatedEmotes',
 ]
 export function simKey(cfg: Config): string {
