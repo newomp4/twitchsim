@@ -1,18 +1,15 @@
 import type { Config } from './types'
 
-export const SAMPLE_SCRIPT = `# One message per line. Paste the JSON from the AI prompt (Help tab) here instead if you like.
-# "name: text" = a specific user, plain text = a random viewer, lines starting with ! are events.
-yo chat, is this the new update?
+export const SAMPLE_SCRIPT = `coolguy_92: yo chat, is this the new update?
 [mod] nightbot: Welcome! Type !discord to join the community
 no way he's actually doing it
-LETS GOOO {e:hype}
-!sub coolguy_92 prime 12 -- love the stream!
-+0.4 KEKW KEKW KEKW
+jess_plays: LETS GOOO PogChamp
+KEKW KEKW KEKW
 clip it CLIP IT
-!gifts bigspender_ttv 5
-[vip] jess_plays: hydrate {streamer}!!
-!highlight can you say hi to my little brother? its his birthday
-!burst 15 W
+[sub] xX_shadow_Xx: hydrate {streamer}!!
+W
+W W
+that was insane
 `
 
 export const DEFAULT_CONFIG: Config = {

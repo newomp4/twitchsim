@@ -81,7 +81,7 @@ export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Con
               onChange={(e) => set('script', e.target.value)}
               spellCheck={false}
               rows={14}
-              placeholder={'Paste JSON from the AI prompt, or type one message per line:\n\nyo chat what did i miss\ncoolguy_92: LETS GOOO {e:hype}\n[mod] nightbot: welcome!\n!sub coolguy_92 prime 12 -- resub hype\n!burst 15 W'}
+              placeholder={'One message per line:\n\ncoolguy_92: yo chat what did i miss\nhe just clutched a 1v3 KEKW\n[mod] nightbot: welcome!\nxX_shadow_Xx: LETS GOOO'}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
                 e.preventDefault()
@@ -90,8 +90,7 @@ export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Con
               }}
             />
             <p className="hint">
-              Paste the JSON your AI generated (see <b>Help → AI prompt</b>) or write lines yourself: <code>name: text</code> for a specific user, plain text for a random viewer,{' '}
-              <code>!sub</code> <code>!gift</code> <code>!raid</code> <code>!burst</code>… for events. Drop a file onto the box to import.
+              One message per line: <code>username: message</code>. A line without a name is said by a random viewer. Paste what your AI wrote (Help tab has the prompt), or drop a .txt/.json file onto the box.
             </p>
           </>
         )}

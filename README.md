@@ -54,49 +54,43 @@ npm run deploy   # build + publish dist/ to the gh-pages branch
 Chrome / Edge / Brave are recommended (WebCodecs, ImageDecoder, File System Access). Firefox works for preview and PNG export.
 Badge/emote images are fetched from Twitch's / 7TV's / FFZ's public CDNs at runtime; ProRes export downloads the FFmpeg wasm engine (~32 MB) once.
 
-## Generate lines with an AI
+## Writing lines
 
-Copy the prompt in [docs/AI_PROMPT.md](docs/AI_PROMPT.md) (also under **Help → Copy the AI prompt** in the app), fill in the length / scenario / tone,
-and paste the JSON it returns into the **Your lines** box or import it as a file. The format is described in that document.
-
-## Script cheat-sheet
+The simple way — one message per line, `username: message` (a line without a name is said by a random viewer; `[mod]` / `[vip]` / `[sub]` before a name adds a badge; emote codes like `KEKW` become images):
 
 ```
-# comment
-hello chat                     random chatter says this
-name: text                     a specific user (created on the fly)
-!user name [mod sub:12 color:#ff69b4]   define a user up-front (no message)
-[mod] nightbot: text           role flags: [mod] [vip] [broadcaster] [founder]
-[sub:12 prime] user: text      [sub:N] months, [prime] [turbo] [partner]
-[bits:1000 gifter:5] u: text   bits / gifter badges, [color:#ff69b4]
+coolguy_92: yo chat what did i miss
+he just clutched a 1v3 KEKW
+[mod] nightbot: welcome to the stream!
+[sub] jake_99: LETS GOOO
+```
+
+Let an AI write it: copy [docs/AI_PROMPT.md](docs/AI_PROMPT.md) (also under **Help → Copy the AI prompt** in the app), fill in the placeholders and paste the result.
+
+<details>
+<summary>Advanced: scripted events, timing, JSON (optional)</summary>
+
+```
 @12.5 text                     at 12.5 s (absolute time)
-+0.4 text                      0.4 s after the previous scripted line
-!wait 3                        pause 3 s before the next line
-!speed 2                       ambient chat 2× faster from here on
++0.4 text                      0.4 s after the previous line
+!wait 3                        pause 3 s
+!user name [mod sub:12 color:#ff69b4]   define a user's badges/color up-front
+[sub:12 prime] user: text      [sub:N] months, [prime] [turbo] [partner] [bits:1000] [gifter:5] [color:#hex] [broadcaster]
 
 !sub user [prime|t1|t2|t3] [months] [-- message]
-!gift gifter recipient [t1|t2|t3]        (* = random user)
-!gifts gifter 10 [t1]                    community gift bomb
-!raid raider 250
-!announce [purple|blue|green|orange] text
-!cheer user 500 text                     bits message
-!first [user:] text                      first-time chatter
-!highlight [user:] text                  channel-points highlight
-!reward Reward Name | [user:] text       "Redeemed …" header
-!reply target: text                      someone replies to target (!reply target | user: text)
-!me [user:] text                         /me action (colored text)
-!delete [user:] text                     gets deleted by a mod
-!timeout user 600                        deletes that user's messages
-!clear  !slow 5  !slowoff  !emoteonly  !emoteonlyoff  !followers 10  !subsonly
-!system text                             gray system line
-!burst 20 KEKW                           20 users spam this within ~2 s
-!gigantify [user:] text KEKW             power-up: giant emote
-!effect rainbow-eclipse [user:] text     power-up: message effect (simmer, cosmic-abyss)
-!mod user  !vip user  !unmod user  !color user #hex
+!gift gifter recipient          !gifts gifter 10        community gift bomb
+!raid raider 250                !announce [purple|blue|green|orange] text
+!cheer user 500 text            !highlight [user:] text
+!first [user:] text             !reply target: text
+!me [user:] text                !delete [user:] text
+!burst 20 KEKW                  20 users spam this at once
+!clear  !slow 5  !emoteonly  !system text  !speed 2  !mod user  !vip user
 
-Placeholders: {e} random emote · {e:laugh|hype|sad|scared|cringe|clap|love|jam|wave|bye|think|stare|fail}
-{streamer} {game} {user} {n} {big} {country}
+{e} random emote · {e:laugh|hype|sad|scared|clap|love|jam|wave} · {streamer} · {game}
 ```
+
+The lines box also accepts a JSON file with users + messages + typed events — schema in [docs/AI_PROMPT.md](docs/AI_PROMPT.md).
+</details>
 
 ## Which export should I use?
 

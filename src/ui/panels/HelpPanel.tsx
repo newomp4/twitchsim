@@ -34,58 +34,51 @@ export function HelpPanel() {
   }
   return (
     <>
-      <Section title="AI prompt — generate names & lines elsewhere, paste them here">
+      <Section title="Writing lines — the simple way">
+        <p className="hint">One message per line, <code>username: message</code>. That's all you need. A line without a name is said by a random viewer.</p>
+        <pre className="help">{`coolguy_92: yo chat what did i miss
+he just clutched a 1v3 KEKW
+[mod] nightbot: welcome to the stream!
+[sub] jake_99: LETS GOOO
+xX_shadow_Xx: no way`}</pre>
         <p className="hint">
-          Copy this prompt into ChatGPT / Claude / Gemini, fill in the three &lt;placeholders&gt; at the bottom (length, scenario, tone), and paste the JSON it returns into the <b>Your lines</b> box on the Chat tab. Users, colors, badges,
-          timing and events all come through.
+          Optional extras: <code>[mod]</code> / <code>[vip]</code> / <code>[sub]</code> before a name gives that user a badge · emote codes (KEKW, PogChamp, catJAM…) become images automatically ·{' '}
+          <code>!wait 3</code> pauses 3 seconds. Everything else (subs, gift bombs, raids…) is generated for you when filler chat is on — you don't have to script it.
         </p>
+      </Section>
+
+      <Section title="Let an AI write it">
+        <p className="hint">Copy this prompt into ChatGPT / Claude / Gemini, fill in the placeholders at the bottom, and paste the lines it returns into <b>Your lines</b> on the Chat tab.</p>
         <button type="button" className="btn primary" onClick={copy}>
           {copied ? 'Copied ✓' : 'Copy the AI prompt'}
         </button>
         <Collapsible title="Show the prompt">
           <pre className="help">{AI_PROMPT}</pre>
         </Collapsible>
-        <Collapsible title="Show an example JSON">
-          <pre className="help">{EXAMPLE_JSON}</pre>
-        </Collapsible>
       </Section>
 
-      <Section title="Writing lines by hand">
-        <pre className="help">{`# comment
-hello chat                     random viewer says this
-name: text                     a specific user (created on the fly)
-!user name [mod sub:12 color:#ff69b4]   define a user up-front (badges/color) without a message
-[mod] nightbot: text           role flags: [mod] [vip] [broadcaster] [founder]
-[sub:12 prime] user: text      [sub:N] months, [prime] [turbo] [partner]
-[bits:1000 gifter:5] u: text   bits / gifter badges, [color:#ff69b4]
-@12.5 text                     at 12.5 s (absolute time)
+      <Collapsible title="Advanced: scripted events, timing, JSON" hint="only if you want exact control">
+        <p className="hint">Everything here is optional. Plain lines already give you a realistic chat.</p>
+        <pre className="help">{`@12.5 text                     at 12.5 s (absolute time)
 +0.4 text                      0.4 s after the previous line
-!wait 3                        pause 3 s before the next line
-!speed 2                       filler chat 2× faster from here on
+!user name [mod sub:12 color:#ff69b4]   define a user's badges/color up-front
+[sub:12 prime] user: text      [sub:N] months, [prime] [turbo] [partner] [bits:1000] [gifter:5] [color:#hex] [broadcaster]
 
 !sub user [prime|t1|t2|t3] [months] [-- message]
-!gift gifter recipient [t1|t2|t3]        (* = random user)
-!gifts gifter 10 [t1]                    community gift bomb
-!raid raider 250
-!announce [purple|blue|green|orange] text
-!cheer user 500 text                     bits message
-!first [user:] text                      first-time chatter
-!highlight [user:] text                  channel-points highlight
-!reward Reward Name | [user:] text       "Redeemed …" header
-!reply target: text                      someone replies to target   (!reply target | user: text)
-!me [user:] text                         /me action (colored text)
-!delete [user:] text                     gets deleted by a mod
-!timeout user 600                        deletes that user's messages
-!clear  !slow 5  !slowoff  !emoteonly  !emoteonlyoff  !followers 10  !subsonly
-!system text                             gray system line
-!burst 20 KEKW                           20 users spam this within ~2 s
-!gigantify [user:] text KEKW             power-up: giant emote
-!effect rainbow-eclipse [user:] text     power-up: message effect (simmer, cosmic-abyss)
-!mod user  !vip user  !unmod user  !color user #hex
+!gift gifter recipient          !gifts gifter 10        community gift bomb
+!raid raider 250                !announce [purple|blue|green|orange] text
+!cheer user 500 text            !highlight [user:] text
+!first [user:] text             !reply target: text
+!me [user:] text                !delete [user:] text
+!burst 20 KEKW                  20 users spam this at once
+!clear  !slow 5  !emoteonly  !system text  !speed 2  !mod user  !vip user
 
-Placeholders anywhere: {e} random emote · {e:laugh|hype|sad|scared|cringe|clap|love|jam|wave|bye|think|stare|fail}
-{streamer} {game} {user} {n} {big} {country}`}</pre>
-      </Section>
+{e} random emote · {e:laugh|hype|sad|scared|clap|love|jam|wave} · {streamer} · {game}`}</pre>
+        <p className="hint">You can also paste a JSON file (users + messages + events); see docs/AI_PROMPT.md in the repo for the schema.</p>
+        <Collapsible title="Example JSON">
+          <pre className="help">{EXAMPLE_JSON}</pre>
+        </Collapsible>
+      </Collapsible>
 
       <Section title="Export formats">
         <ul className="help-list">
