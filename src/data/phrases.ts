@@ -51,7 +51,7 @@ export const GENERIC: Record<string, PhrasePool> = {
       'nice', 'sick', 'clean', 'smooth', 'cooked', 'cooking', 'hes cooking', 'we are so back', 'its over', 'its so over',
       'we are back', 'chat', 'CHAT', 'chat is this real', 'is this real', 'no', 'NO', 'yes', 'YES', 'pls', 'please', 'plz',
       'omg', 'OMG', 'wtf', 'brooo', 'ayo', 'AYO', 'hmm', 'sure', 'ok and', 'and?', 'cap', 'no cap', 'nocap', 'lowkey', 'highkey',
-      'lets go', 'LETS GO', 'LETSGOOO', 'here we go', 'HERE WE GO', 'oh no', 'oh no no no', 'uh oh', 'ez clap', 'clap',
+      'lets go', 'LETS GO', 'LETSGOOO', 'LFG', 'LFGGG', 'LFGGGGG', 'lfg', 'sheesh', 'SHEEESH', 'yoooo', 'ayo', 'we up', 'lock in', 'LOCK IN', 'let him cook', 'cooked', 'here we go', 'HERE WE GO', 'oh no', 'oh no no no', 'uh oh', 'ez clap', 'clap',
       'the goat', 'GOAT', 'hes him', 'HES HIM', 'him', 'she is her', 'W streamer', 'W chat', 'L chat', 'W stream', 'peak',
       'peak stream', 'certified', 'classic', 'a classic', 'moment', 'iconic', 'legendary', 'cinema', 'CINEMA', 'movie',
       'this is cinema', 'aura', '+1000 aura', '-1000 aura', 'aura farming', 'goated', 'washed', 'cracked', 'hes cracked',
@@ -143,11 +143,31 @@ export const GENERIC: Record<string, PhrasePool> = {
 }
 
 export const MOODS: Record<string, Record<string, PhrasePool>> = {
+  general: {
+    gen1: {
+      weight: 20,
+      lines: [
+        'LFG', 'LFGGG', 'LFGGGGG', 'lfg', 'LETS GOOO', 'W', 'WWW', 'big W', 'W stream', 'sheesh', 'SHEEESH', 'yooo', 'YOOOO', 'ayo', 'nahhh', 'no way', 'no shot',
+        'real', 'so real', 'facts', 'fr', 'ong', 'true', 'valid', 'this', 'chat is this real', 'is this real', 'im locked in', 'lock in', 'LOCK IN', 'let him cook', 'let her cook',
+        'hes cooking', 'cooked', 'COOKED', 'we eating', 'we up', 'WE UP', 'its time', 'ITS TIME', 'here we go', 'HERE WE GO', 'im here for it', 'say less', 'bet', 'ok bet', 'on god',
+        'clip it', 'CLIP IT', 'clip that', 'someone clip that', 'that was crazy', 'thats crazy', 'thats wild', 'wild', 'insane', 'crazy', 'bro', 'BRO', 'broooo', 'lmaooo', 'im crying',
+        'im dead', 'i cant', 'stop', 'STOP', 'nah', 'nah man', 'ok that was funny', 'lol', 'lmao', 'LMAO', 'hahaha', 'HAHAHA', 'W take', 'L take', 'ratio', 'cap', 'no cap', 'facts tho',
+        'he is him', 'HES HIM', 'she is her', 'goat', 'GOAT', 'goated', 'certified', 'peak', 'peak stream', 'cinema', 'movie', 'aura', 'aura farming', '+1000 aura', 'diff', 'gap',
+        'yall seeing this', 'you seeing this chat', 'chat', 'CHAT', 'chat what', 'wait what', 'huh', 'HUH', 'what', 'WHAT', 'hold on', 'wait wait wait', 'pause', 'nahh pause',
+        'i love this stream', 'best stream', 'W streamer', 'love this', 'this is content', 'content', 'CONTENT', 'run it back', 'again', 'AGAIN', 'one more', 'do it again', 'encore',
+        'hi chat', 'hey chat', 'yo chat', 'wsg chat', 'just got here what happened', 'what did i miss', 'someone catch me up', 'how long has he been live', 'is this live', 'when did this start',
+        'follow him rn', 'go follow', 'sub btw', 'worth the sub', 'W mods', 'mods W', 'nightbot W', 'W chat', 'chat is fast', 'chat is moving', 'slow down chat', 'im lagging', 'stream lagging?', 'fine for me',
+      ],
+    },
+    gen2: { weight: 3, lines: ['{e:hype}', '{e:laugh}', '{e:clap}', 'W {e:hype}', 'LFG {e:hype}', 'sheesh {e:hype}', 'no way {e:laugh}', 'clip it {e:hype}'] },
+  },
   hype: {
     hype1: {
       weight: 20,
       lines: [
-        'LETS GOOOO', 'LETSGOOO', 'LETS GOOOOOOO', 'W', 'WWW', 'WWWWW', 'BIG W', 'HUGE W', 'HES CRACKED', 'HES CRACKED {e:hype}',
+        'LFG', 'LFGGG', 'LFGGGGG', 'LFGGGGGGG', 'lfg', 'LFG!!!', 'LESGOOO', 'LESSGOOOO', 'GOOOOO', 'RAHHHH', 'AYOOOO', 'YOOOOO', 'SHEEEESH', 'ITS TIME', 'WE UP', 'WE OUTSIDE',
+      'LOCK IN', 'im locked in', 'let him cook', 'HE COOKED', 'COOKED', 'we eating', 'WE EATING', 'im here for it', 'ON GOD', 'no shot', 'nahhh', 'BROOOO', 'HES BACK', 'ITS HAPPENING',
+      'LETS GOOOO', 'LETSGOOO', 'LETS GOOOOOOO', 'W', 'WWW', 'WWWWW', 'BIG W', 'HUGE W', 'HES CRACKED', 'HES CRACKED {e:hype}',
         'INSANE', 'INSANE {e:hype}', 'NO WAY', 'NO WAYYY', 'NO SHOT', 'CLIP IT', 'CLIP THAT', 'CLIP CLIP CLIP', 'POGGERS', 'POG',
         'POGCHAMP', 'HOLY', 'HOLY {e:hype}', 'OMG', 'OMGGG', 'HES HIM', 'HE IS HIM', 'THE GOAT', 'GOAT', 'GOATED', 'CRACKED',
         'CINEMA', 'MOVIE', 'ABSOLUTE CINEMA', 'PEAK', 'PEAK CONTENT', 'HES SO GOOD', 'HOW', 'HOW???', 'HOW DID HE DO THAT',

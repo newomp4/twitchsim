@@ -41,11 +41,14 @@ interface Ctx {
   extraChatterSeed: number
   raidWindows?: { t0: number; t1: number; users: Chatter[] }[]
   lastScriptUser?: Chatter
+  /** user lines re-used as filler (when cfg.fillerFromScript) */
+  fillerPool?: { user?: string; text: string }[]
 }
 
 const PERSONAS = ['normal', 'emoter', 'yapper', 'questioner', 'backseater', 'hater', 'wholesome', 'spammer', 'lurker']
 const PERSONA_WEIGHTS: Record<string, number[]> = {
   //          normal emoter yapper question backseat hater whole spam lurker
+  general: [40, 12, 8, 8, 2, 4, 8, 10, 8],
   hype: [30, 30, 5, 5, 4, 3, 5, 12, 6],
   chill: [40, 15, 12, 10, 2, 2, 12, 2, 5],
   funny: [30, 30, 8, 5, 3, 4, 5, 10, 5],
@@ -112,6 +115,14 @@ export function buildTimeline(inputs: SimInputs): Timeline {
   const speedChanges: { t: number; mult: number }[] = []
   const entries = cfg.mode === 'ambient' || cfg.mode === 'hype' ? [] : parseScript(cfg.script)
   const prefillMs = Math.max(0, cfg.prefillSec) * 1000
+  if (cfg.fillerFromScript) {
+    // filler re-uses the plain chat lines of the script (any mode)
+    const all = cfg.mode === 'ambient' || cfg.mode === 'hype' ? parseScript(cfg.script) : entries
+    ctx.fillerPool = all
+      .filter((e): e is Extract<ScriptEntry, { type: 'chat' }> => e.type === 'chat' && !e.first && !e.highlight && !e.reward && !e.deleteAfter && !e.cheer && !!e.text.trim())
+      .map((e) => ({ user: e.user, text: e.text }))
+    if (!ctx.fillerPool.length) ctx.fillerPool = undefined
+  }
 
   if (cfg.welcomeMessage) {
     messages.push(systemMessage(ctx, -prefillMs - 1, 'welcome', [{ text: 'Welcome to the chat room!' }]))
@@ -433,12 +444,14 @@ function poolsFor(ctx: Ctx, persona: string): { pools: PhrasePool[]; weights: nu
     let mult = 1
     if (k === 'emoteOnly') mult = dens * 2.2
     else if (k === 'emoteWord') mult = 0.4 + dens * 1.4
-    else if (k === 'question') mult = persona === 'questioner' ? 4 : 1
+    else if (k === 'question') mult = (persona === 'questioner' ? 4 : 1) * (mood === 'general' ? 0.5 : 1)
     else if (k === 'pasta') mult = persona === 'yapper' ? 5 : 1
     else if (k === 'mention') mult = cfg.mentionsRate * 2
     else if (k === 'bits') mult = cfg.cheersRate * 1.5
     else if (k === 'ratio') mult = mood === 'toxic' ? 3 : 0.5
     else if (k === 'commands') mult = ctx.bots.length ? 1 : 0.4
+    else if (k === 'streamerTalk') mult = mood === 'general' ? 0.4 : 1
+    else if (k === 'lurk') mult = mood === 'general' ? 0.4 : 1
     add(p, mult)
   }
   const m = MOODS[mood] ?? MOODS.chill
@@ -447,9 +460,9 @@ function poolsFor(ctx: Ctx, persona: string): { pools: PhrasePool[]; weights: nu
     add(GENERIC.emoteOnly, 30 * Math.max(0.3, dens))
     add(GENERIC.emoteWord, 12)
   }
-  if (persona === 'hater') add(MOODS.toxic.tox1, 10)
-  if (persona === 'wholesome') add(MOODS.wholesome.whole1, 8)
-  if (persona === 'backseater') add(MOODS.gaming.game1, 12)
+  if (persona === 'hater' && mood !== 'wholesome') add(MOODS.toxic.tox1, mood === 'toxic' ? 10 : 3)
+  if (persona === 'wholesome' && mood !== 'toxic') add(MOODS.wholesome.whole1, mood === 'wholesome' ? 8 : 2)
+  if (persona === 'backseater' && (mood === 'gaming' || mood === 'clutch')) add(MOODS.gaming.game1, 12)
   if (persona === 'yapper') {
     add(MOODS.chill.chill1, 3)
     add(GENERIC.pasta, 5)
@@ -485,7 +498,7 @@ function mannerisms(ctx: Ctx, text: string, persona: string): string {
     const reps = rng.int(2, 4)
     t = Array(reps).fill(t).join(' ')
   }
-  if (hasPlaceholderEmote && rng.chance(cfg.emoteDensity * 0.45)) {
+  if (hasPlaceholderEmote && rng.chance(cfg.emoteDensity * 0.35)) {
     const e = rng.weighted(registry.list, registry.weights).name
     t = rng.chance(0.75) ? `${t} ${e}` : `${e} ${t}`
   }
@@ -497,8 +510,17 @@ function mannerisms(ctx: Ctx, text: string, persona: string): string {
   return t.slice(0, 500)
 }
 
+function poolLine(ctx: Ctx): string {
+  const { rng } = ctx
+  const line = rng.pick(ctx.fillerPool!)
+  let t = fill(ctx, line.text)
+  if (ctx.registry.size() > 0 && rng.chance(ctx.cfg.emoteDensity * 0.3)) t = `${t} ${rng.weighted(ctx.registry.list, ctx.registry.weights).name}`
+  return t
+}
+
 function genText(ctx: Ctx, user: Chatter): string {
   const { rng } = ctx
+  if (ctx.fillerPool) return poolLine(ctx)
   const { pools, weights } = poolsFor(ctx, user.persona)
   const pool = rng.weighted(pools, weights)
   const line = rng.pick(pool.lines)
@@ -905,10 +927,10 @@ function ambientMessage(ctx: Ctx, t: number, lastUser?: Chatter): ChatMessage | 
   const r = rng.next()
   if (r < cfg.firstTimeRate * 0.08) {
     user = freshChatter(ctx, 'normal', true)
-    text = mannerisms(ctx, fill(ctx, rng.pick(FIRST_TIME_LINES)), 'normal')
+    text = ctx.fillerPool ? poolLine(ctx) : mannerisms(ctx, fill(ctx, rng.pick(FIRST_TIME_LINES)), 'normal')
     extra.firstTime = true
   } else if (r < cfg.firstTimeRate * 0.08 + cfg.highlightRate * 0.05) {
-    text = mannerisms(ctx, fill(ctx, rng.pick(HIGHLIGHT_LINES)), 'normal')
+    text = ctx.fillerPool ? poolLine(ctx) : mannerisms(ctx, fill(ctx, rng.pick(HIGHLIGHT_LINES)), 'normal')
     extra.highlighted = true
   } else if (r < cfg.firstTimeRate * 0.08 + cfg.highlightRate * 0.05 + cfg.replyRate * 0.09 && ctx.recent.length > 2) {
     const candidates = ctx.recent.filter((m) => m.user && m.user !== user && !m.notice && !m.user.isBot).slice(-10)
@@ -916,10 +938,10 @@ function ambientMessage(ctx: Ctx, t: number, lastUser?: Chatter): ChatMessage | 
       const orig = rng.pick(candidates)
       extra.reply = { displayName: orig.user!.displayName, text: orig.text }
       const p = rng.pick(GENERIC.mention.lines)
-      text = mannerisms(ctx, fill(ctx, p.replace('{user} ', ''), { user: orig.user! }), user.persona)
+      text = ctx.fillerPool ? poolLine(ctx) : mannerisms(ctx, fill(ctx, p.replace('{user} ', ''), { user: orig.user! }), user.persona)
     } else text = genText(ctx, user)
   } else if (r < cfg.firstTimeRate * 0.08 + cfg.highlightRate * 0.05 + cfg.replyRate * 0.09 + cfg.deleteRate * 0.03) {
-    text = mannerisms(ctx, fill(ctx, rng.pick(MOODS.toxic.tox1.lines)), 'hater')
+    text = ctx.fillerPool ? poolLine(ctx) : mannerisms(ctx, fill(ctx, rng.pick(MOODS.toxic.tox1.lines)), 'hater')
     extra.deletedAt = t + rng.int(800, 4000)
   } else if (r < cfg.firstTimeRate * 0.08 + cfg.highlightRate * 0.05 + cfg.replyRate * 0.09 + cfg.deleteRate * 0.03 + cfg.actionsRate * 0.03) {
     text = fill(ctx, rng.pick(['is dancing {e:jam}', 'waves at chat', 'is lurking', 'claps', 'is confused', 'is crying', 'is hyped', 'is eating', 'is back', 'is here', 'left the chat', 'is vibing', 'screams', 'sighs', 'is speechless']))
@@ -934,8 +956,13 @@ function ambientMessage(ctx: Ctx, t: number, lastUser?: Chatter): ChatMessage | 
       extra.effect = rng.pick(['rainbow-eclipse', 'simmer', 'cosmic-abyss'])
     }
   } else if (r < cfg.firstTimeRate * 0.08 + cfg.highlightRate * 0.05 + cfg.replyRate * 0.09 + cfg.deleteRate * 0.03 + cfg.actionsRate * 0.03 + cfg.powerUpsRate * 0.03 + cfg.rewardRate * 0.03) {
-    text = mannerisms(ctx, fill(ctx, rng.pick(HIGHLIGHT_LINES)), 'normal')
+    text = ctx.fillerPool ? poolLine(ctx) : mannerisms(ctx, fill(ctx, rng.pick(HIGHLIGHT_LINES)), 'normal')
     extra.rewardName = rng.pick(['Ask a question', 'Song request', 'Message on screen', 'TTS', 'Rate my setup', 'Say hi', 'Water break', 'Choose the next game', 'Hydrate!', 'Emote-only chat'])
+  } else if (ctx.fillerPool) {
+    const line = rng.pick(ctx.fillerPool)
+    if (line.user) user = resolveUser(ctx, line.user)
+    text = fill(ctx, line.text)
+    if (ctx.registry.size() > 0 && rng.chance(cfg.emoteDensity * 0.3)) text = `${text} ${rng.weighted(ctx.registry.list, ctx.registry.weights).name}`
   } else {
     text = genText(ctx, user)
   }
@@ -955,6 +982,10 @@ function spawnMoment(ctx: Ctx, t: number, out: ChatMessage[], mpmNow: number): v
     if (mood === 'wholesome' && (m.cat === 'love' || m.cat === 'wave')) w *= 3
     if (mood === 'toxic' && (m.cat === 'cringe' || m.cat === 'fail')) w *= 3
     if (mood === 'chill' && (m.cat === 'jam' || m.cat === 'love' || m.cat === 'wave')) w *= 2
+    if (mood === 'general') {
+      if (m.cat === 'hype' || m.cat === 'clap' || m.cat === 'spamword' || m.cat === 'laugh') w *= 2
+      if (m.cat === 'sad' || m.cat === 'fail' || m.cat === 'scared' || m.cat === 'jam') w *= 0.35
+    }
     return w
   })
   const moment = rng.weighted(MOMENTS, catWeights)
@@ -963,15 +994,20 @@ function spawnMoment(ctx: Ctx, t: number, out: ChatMessage[], mpmNow: number): v
   const dur = rng.float(1800, 6000)
   const n = Math.max(3, Math.min(120, Math.round(perSec * (dur / 1000) * rng.float(1.5, 3.5) + 2)))
   let last: Chatter | undefined
+  const poolSpam = ctx.fillerPool ? rng.pick(ctx.fillerPool).text : null
   for (let i = 0; i < n; i++) {
     const u = pickChatter(ctx, last)
     last = u
     // clustered near the start of the moment
     const dt = Math.pow(rng.next(), 1.6) * dur
-    const line = rng.pick(moment.lines)
-    let text = fill(ctx, line, { spam })
-    if (u.persona === 'spammer' && rng.chance(0.5)) text = `${text} ${text}`
-    if (rng.chance(0.15)) text = text.toUpperCase()
+    let text: string
+    if (poolSpam !== null) text = rng.chance(0.6) ? fill(ctx, poolSpam) : poolLine(ctx)
+    else {
+      const line = rng.pick(moment.lines)
+      text = fill(ctx, line, { spam })
+      if (u.persona === 'spammer' && rng.chance(0.5)) text = `${text} ${text}`
+      if (rng.chance(0.15)) text = text.toUpperCase()
+    }
     out.push(makeMessage(ctx, t + dt, u, text))
   }
 }

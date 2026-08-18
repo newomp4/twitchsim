@@ -6,6 +6,7 @@ import { SAMPLE_SCRIPT } from '../../core/defaults'
 import { Section, Field, Select, TextInput, Toggle, Slider, Segmented, Row, Collapsible, NumberInput, copyText } from '../controls'
 
 const MOODS: { value: Mood; label: string }[] = [
+  { value: 'general', label: 'General hype (LFG, W, clip it…)' },
   { value: 'gaming', label: 'Gaming / backseat' },
   { value: 'hype', label: 'Hype' },
   { value: 'funny', label: 'Funny' },
@@ -95,10 +96,13 @@ export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Con
           </>
         )}
         {usesFiller && (
-          <Row>
-            <Select label="Filler chatter vibe" value={cfg.mood} options={MOODS} onChange={(v) => set('mood', v)} />
-            {cfg.mode === 'mixed' && <Slider label="Filler messages between my lines" value={cfg.scriptGapMultiplier} min={0} max={20} step={1} onChange={(v) => set('scriptGapMultiplier', v)} />}
-          </Row>
+          <>
+            <Toggle label="Filler re-uses my lines (shuffled) instead of generic chatter" value={cfg.fillerFromScript} onChange={(v) => set('fillerFromScript', v)} hint="Keeps the whole chat on your topic: filler messages are random picks from the lines above." />
+            <Row>
+              {!cfg.fillerFromScript && <Select label="Filler chatter vibe" value={cfg.mood} options={MOODS} onChange={(v) => set('mood', v)} />}
+              {cfg.mode === 'mixed' && <Slider label="Filler messages between my lines" value={cfg.scriptGapMultiplier} min={0} max={20} step={1} onChange={(v) => set('scriptGapMultiplier', v)} />}
+            </Row>
+          </>
         )}
       </Section>
 

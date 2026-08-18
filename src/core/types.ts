@@ -125,7 +125,7 @@ export type AnimationStyle = 'instant' | 'slide-up' | 'slide-left' | 'slide-righ
 export type ChatStyle = 'twitch-dark' | 'twitch-light' | 'transparent' | 'custom'
 export type FontSizePreset = 'small' | 'default' | 'large' | 'xlarge'
 export type ContentMode = 'script' | 'ambient' | 'mixed' | 'hype'
-export type Mood = 'hype' | 'chill' | 'funny' | 'gaming' | 'wholesome' | 'toxic' | 'reactions' | 'clutch' | 'music' | 'irl'
+export type Mood = 'general' | 'hype' | 'chill' | 'funny' | 'gaming' | 'wholesome' | 'toxic' | 'reactions' | 'clutch' | 'music' | 'irl'
 
 export interface Config {
   seed: string
@@ -140,6 +140,8 @@ export interface Config {
   language: 'en'
   scriptUsersRandom: boolean
   scriptGapMultiplier: number
+  /** filler chat re-uses (shuffles) your own lines instead of the built-in corpus */
+  fillerFromScript: boolean
   streamerChats: boolean
   streamerColor: string
   // pacing

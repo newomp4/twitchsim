@@ -86,7 +86,7 @@ export function useDebounced<T>(value: T, ms: number): T {
 
 /** Config fields that change the simulation (vs. only the rendering). */
 const SIM_KEYS: (keyof Config)[] = [
-  'seed', 'mode', 'script', 'mood', 'streamerName', 'streamerLogin', 'viewerName', 'gameName', 'scriptUsersRandom', 'scriptGapMultiplier', 'streamerChats', 'streamerColor',
+  'seed', 'mode', 'script', 'mood', 'streamerName', 'streamerLogin', 'viewerName', 'gameName', 'scriptUsersRandom', 'scriptGapMultiplier', 'fillerFromScript', 'streamerChats', 'streamerColor',
   'messagesPerMinute', 'pacing', 'burstiness', 'reactionMoments', 'startDelayMs', 'prefillSec', 'durationSec', 'durationAuto', 'tailSec',
   'subsRate', 'giftsRate', 'raidsRate', 'cheersRate', 'firstTimeRate', 'highlightRate', 'replyRate', 'deleteRate', 'announcementRate', 'actionsRate', 'mentionsRate', 'powerUpsRate', 'rewardRate', 'systemNotices', 'welcomeMessage',
   'chatterPoolSize', 'customColorRatio', 'subRatio', 'primeRatio', 'modCount', 'vipCount', 'bitsBadgeRatio', 'gifterBadgeRatio', 'eventBadgeRatio', 'badgePool', 'botsEnabled', 'customNames', 'customNamesOnly', 'localizedNamesRatio', 'channelSubBadgeStyle', 'customBadges', 'customEmotes', 'useCustomEmotesInFiller',
