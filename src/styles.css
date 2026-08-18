@@ -5,10 +5,10 @@
   --card: #151517;
   --card2: #1b1b1e;
   --border: #222226;
-  --border2: #2c2c31;
+  --border2: #3a3a41;
   --text: #f2f2f3;
   --muted: #a3a3ab;
-  --muted2: #6f6f78;
+  --muted2: #86868f;
   --accent: #f2f2f3;
   --accent-text: #0b0b0c;
   --ring: rgba(255, 255, 255, 0.18);
@@ -77,15 +77,15 @@ button.icon.primary:hover { background: #fff; }
 .sec h3 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted2); font-weight: 600; }
 .sec.collapsible { padding: 0; }
 .collapse-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 12px 0; background: transparent; border: 0; text-align: left; }
-.collapse-head:hover h3 { color: var(--text); }
-.collapse-head h3 { margin: 0; transition: color .12s; }
+.collapse-head:hover .ctitle { color: var(--text); }
+.collapse-head .ctitle { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted2); font-weight: 600; transition: color .12s; }
 .collapse-head .chev { color: var(--muted2); width: 10px; font-size: 10px; }
 .collapse-head .chint { color: var(--muted2); font-size: 11.5px; margin-left: auto; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
 .collapse-body { padding: 0 0 12px; }
 /* a collapsible nested inside a section is a quiet sub-row, not a new section */
 .sec .sec.collapsible { border-top: 0; margin: 2px 0 0; }
 .sec .sec.collapsible .collapse-head { padding: 8px 0; }
-.sec .sec.collapsible h3 { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 500; color: var(--muted); }
+.sec .sec.collapsible .ctitle { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 500; color: var(--muted); }
 .sec .sec.collapsible .collapse-body { padding-bottom: 6px; }
 .hint { margin: 4px 0 8px; color: var(--muted2); font-size: 11.5px; line-height: 1.45; }
 .hint b { color: var(--muted); }
@@ -151,6 +151,7 @@ button.link:hover { color: var(--text); }
 .progress .fill { height: 100%; background: var(--text); transition: width .15s; }
 .progress .ptext { color: var(--muted); font-size: 12px; margin-top: 4px; }
 pre.help { background: var(--card); border: 1px solid var(--border2); border-radius: var(--radius-sm); padding: 10px; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-word; color: var(--muted); margin: 6px 0; }
+pre.help.cols { white-space: pre; word-break: normal; }
 .help-list { padding-left: 18px; color: var(--muted); line-height: 1.55; font-size: 12px; margin: 4px 0; }
 .help-list b { color: var(--text); }
 kbd { background: var(--card2); border: 1px solid var(--border2); border-radius: 3px; padding: 0 5px; font-family: inherit; }
@@ -160,6 +161,10 @@ kbd { background: var(--card2); border: 1px solid var(--border2); border-radius:
   .stage { min-height: 60vh; }
   body { overflow: auto; }
 }
+
+/* ---------- crash screen ---------- */
+.crash { max-width: 640px; margin: 60px auto; padding: 0 20px; }
+.crash h2 { font-size: 16px; font-weight: 600; margin: 0 0 12px; }
 
 /* ---------- position picker (where the chat sits in a bigger frame) ---------- */
 .posgrid { display: grid; grid-template-columns: repeat(3, 26px); gap: 3px; margin: 4px 0 8px; }

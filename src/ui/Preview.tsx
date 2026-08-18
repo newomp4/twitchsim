@@ -109,7 +109,8 @@ export function Preview({ cfg, timeline, assets, player, zoom }: { cfg: Config; 
     if (!el) return
     const ro = new ResizeObserver(() => {
       const r = el.getBoundingClientRect()
-      const s = Math.min((r.width - 32) / cfg.width, (r.height - 32) / cfg.height)
+      // 16px padding each side, plus the meta line + gap under the stage
+      const s = Math.min((r.width - 32) / cfg.width, (r.height - 32 - 28) / cfg.height)
       setFitScale(Math.max(0.1, Math.min(4, s)))
     })
     ro.observe(el)
@@ -169,10 +170,10 @@ export function Transport({ player, durationMs }: { player: Player; durationMs: 
   }
   return (
     <div className="transport">
-      <button type="button" className="icon" onClick={() => player.restart()} title="Restart">
+      <button type="button" className="icon" onClick={() => player.restart()} title="Restart" aria-label="Restart">
         ⟲
       </button>
-      <button type="button" className="icon primary" onClick={() => player.toggle()} title={player.playing ? 'Pause' : 'Play'}>
+      <button type="button" className="icon primary" onClick={() => player.toggle()} title={player.playing ? 'Pause' : 'Play'} aria-label={player.playing ? 'Pause' : 'Play'}>
         {player.playing ? '❚❚' : '▶'}
       </button>
       <span className="time">{fmt(t)}</span>
@@ -193,7 +194,7 @@ export function Transport({ player, durationMs }: { player: Player; durationMs: 
         }}
       />
       <span className="time">{fmt(durationMs)}</span>
-      <select value={player.speed} onChange={(e) => player.setSpeed(parseFloat(e.target.value))} title="Preview speed">
+      <select value={player.speed} onChange={(e) => player.setSpeed(parseFloat(e.target.value))} title="Preview speed" aria-label="Preview speed">
         <option value={0.25}>0.25×</option>
         <option value={0.5}>0.5×</option>
         <option value={1}>1×</option>

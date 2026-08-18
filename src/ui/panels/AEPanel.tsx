@@ -34,6 +34,8 @@ export function AEPanel({ cfg, set, patch, timeline, assets }: { cfg: Config; se
   const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const geo = computeGeometry(cfg)
+  // the length only follows the lines when there are ordered lines
+  const autoLen = cfg.durationAuto && (cfg.mode === 'script' || cfg.mode === 'mixed') && !!cfg.script.trim()
   const running = !!progress && progress.phase !== 'done' && progress.phase !== 'error'
   const host = hostInfo()
 
@@ -136,7 +138,7 @@ export function AEPanel({ cfg, set, patch, timeline, assets }: { cfg: Config; se
         </Field>
         <Row>
           <Select label="Frame rate" value={String(cfg.exportFps)} onChange={(v) => set('exportFps', parseInt(v, 10))} options={[{ value: '24', label: '24 fps' }, { value: '25', label: '25 fps' }, { value: '30', label: '30 fps' }, { value: '50', label: '50 fps' }, { value: '60', label: '60 fps' }]} />
-          <Slider label="Duration (s)" value={cfg.durationAuto ? Math.round(timeline.durationMs / 100) / 10 : cfg.durationSec} min={1} max={600} onChange={(v) => patch({ durationSec: v, durationAuto: false })} format={(v) => (cfg.durationAuto ? `${v}s (auto)` : `${v}s`)} hint={cfg.durationAuto ? 'ends right after your last line — moving this switches to a fixed length' : ''} />
+          <Slider label="Duration (s)" value={autoLen ? Math.round(timeline.durationMs / 100) / 10 : cfg.durationSec} min={1} max={600} onChange={(v) => patch({ durationSec: v, durationAuto: false })} format={(v) => (autoLen ? `${v}s (auto)` : `${v}s`)} hint={autoLen ? 'ends right after your last line — moving this switches to a fixed length' : ''} />
         </Row>
         <p className="hint">
           Comp: <b>{geo.outW}×{geo.outH}</b> · chat {geo.chatW}×{geo.chatH} at ({geo.chatX},{geo.chatY}) · {(timeline.durationMs / 1000).toFixed(1)}s @ {cfg.exportFps}fps · {timeline.messages.length} messages
@@ -171,7 +173,7 @@ export function AEPanel({ cfg, set, patch, timeline, assets }: { cfg: Config; se
       <Section title="Build">
         <div className="exportbar">
           {!running ? (
-            <button type="button" className="btn primary big" onClick={start} disabled={!!infoErr}>
+            <button type="button" className="btn primary big" onClick={start}>
               {result ? 'Rebuild in After Effects' : 'Build in After Effects'}
             </button>
           ) : (

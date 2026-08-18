@@ -49,10 +49,11 @@ function cepHtmlPlugin(): Plugin {
   }
 }
 
-const CEP = !!process.env.TWITCHSIM_CEP
-
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  // `vite build --mode cep` (works in cmd.exe too) or TWITCHSIM_CEP=1
+  const CEP = mode === 'cep' || !!process.env.TWITCHSIM_CEP
+  return {
   plugins: [react(), devSavePlugin(), ...(CEP ? [cepHtmlPlugin()] : [])],
   // GitHub Pages serves from /twitchsim/; the AE panel from file:// (relative); local dev and other hosts use /
   base: CEP ? './' : process.env.GITHUB_PAGES ? '/twitchsim/' : '/',
@@ -81,4 +82,5 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
   },
+  }
 })

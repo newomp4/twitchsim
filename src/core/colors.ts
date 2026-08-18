@@ -43,8 +43,11 @@ export const POPULAR_CUSTOM_COLORS = [
 ]
 
 export function hexToRgb(hex: string): [number, number, number] {
-  let h = hex.replace('#', '')
+  let h = hex.replace('#', '').trim()
+  if (h.length === 4) h = h.slice(0, 3) // #rgba → drop alpha
   if (h.length === 3) h = h.split('').map((c) => c + c).join('')
+  if (h.length === 8) h = h.slice(0, 6) // #rrggbbaa → drop alpha
+  if (!/^[0-9a-f]{6}$/i.test(h)) return [128, 128, 128] // not a colour: neutral gray instead of black
   const n = parseInt(h, 16)
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
 }

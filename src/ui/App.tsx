@@ -57,7 +57,11 @@ export default function App() {
   // a real channel loaded in a previous session: fetch its badges/emotes again (they are not persisted)
   const wantedChannel = cfg.loadedChannel
   useEffect(() => {
-    if (!wantedChannel || channel) return
+    if (!wantedChannel) {
+      setChannel(null) // Reset / a preset without a channel: drop the loaded data too
+      return
+    }
+    if (channel?.login === wantedChannel) return
     let cancelled = false
     loadChannel(wantedChannel).then(
       (data) => {
@@ -114,9 +118,11 @@ export default function App() {
     }
     // scene(name?) compiles the After Effects scene description (used by the AE panel; handy for tests)
     const scene = (compName = 'debug') => compileScene(cfg, timeline, assets, { compName, buildKey: compName })
-    g.__twitchsim = { ...(g.__twitchsim ?? {}), timeline, snapshot, scene }
+    const shareCode = () => encodeShare(cfg)
+    g.__twitchsim = { ...(g.__twitchsim ?? {}), timeline, snapshot, scene, shareCode, cfg }
   }, [timeline, cfg])
   const player = usePlayer(timeline.durationMs)
+  const { toggle, restart } = player
   // restart playback when the simulation changes
   useEffect(() => {
     player.seek(0)
@@ -130,14 +136,15 @@ export default function App() {
       const el = e.target as HTMLElement
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return
       if (e.code === 'Space') {
+        if (el && (el.tagName === 'BUTTON' || el.tagName === 'A')) return // Space activates the focused button
         e.preventDefault()
-        player.toggle()
-      } else if (e.key === 'r' || e.key === 'R') player.restart()
+        toggle()
+      } else if (e.key === 'r' || e.key === 'R') restart()
       else if (e.key === 'n' || e.key === 'N') set('seed', Math.random().toString(36).slice(2, 8))
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [player, set])
+  }, [toggle, restart, set])
 
   const share = async () => {
     const url = `${location.origin}${location.pathname}#c=${encodeShare(cfg)}`
@@ -161,7 +168,7 @@ export default function App() {
   const loadPreset = () => {
     const input = document.createElement('input')
     input.type = 'file'
-    input.accept = 'application/json'
+    input.accept = '.json,application/json'
     input.onchange = async () => {
       const f = input.files?.[0]
       if (!f) return
@@ -220,7 +227,8 @@ export default function App() {
           <div className="panel-body" ref={panelBodyRef}>
             {tab === 'Chat' && <ChatPanel cfg={cfg} set={set} />}
             {tab === 'Look' && <StylePanel cfg={cfg} set={set} patch={patch} channel={channel} setChannel={setChannel} />}
-            {/* export/build panels stay mounted so a running job keeps its progress + Cancel while you look at other tabs */}
+            {tab === 'Help' && <HelpPanel />}
+            {/* export/build panels stay mounted (last, so visible tabs keep their :first-child styling) — a running job keeps its progress + Cancel while you look at other tabs */}
             {!IN_AE && (
               <div hidden={tab !== 'Export'}>
                 <ExportPanel cfg={cfg} set={set} patch={patch} timeline={timeline} assets={assets} />
@@ -231,7 +239,6 @@ export default function App() {
                 <AEPanel cfg={cfg} set={set} patch={patch} timeline={timeline} assets={assets} />
               </div>
             )}
-            {tab === 'Help' && <HelpPanel />}
           </div>
         </aside>
       </main>

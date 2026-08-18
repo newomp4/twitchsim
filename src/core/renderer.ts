@@ -180,16 +180,17 @@ export class ChatRenderer {
     // top fade
     if (o.fadeTopEdge > 0) {
       const fh = Math.min(H, o.fadeTopEdge)
-      if (!bg) {
-        ctx.save()
-        ctx.globalCompositeOperation = 'destination-out'
-        const grad = ctx.createLinearGradient(0, 0, 0, fh)
-        grad.addColorStop(0, 'rgba(0,0,0,1)')
-        grad.addColorStop(1, 'rgba(0,0,0,0)')
-        ctx.fillStyle = grad
-        ctx.fillRect(0, 0, W, fh)
-        ctx.restore()
-      } else {
+      // fade the content out first, then (if the panel has a background) fade the panel color back in —
+      // this way a semi-transparent custom background keeps its own alpha in the strip
+      ctx.save()
+      ctx.globalCompositeOperation = 'destination-out'
+      const cut = ctx.createLinearGradient(0, 0, 0, fh)
+      cut.addColorStop(0, 'rgba(0,0,0,1)')
+      cut.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.fillStyle = cut
+      ctx.fillRect(0, 0, W, fh)
+      ctx.restore()
+      if (bg) {
         const grad = ctx.createLinearGradient(0, 0, 0, fh)
         grad.addColorStop(0, bg)
         grad.addColorStop(1, transparentize(bg))
@@ -333,7 +334,8 @@ export class ChatRenderer {
     const wantHi = o.hiRes
     let img = this.assets.request(wantHi ? a.urlHi : a.url)
     if (!img) img = this.assets.get(wantHi ? a.url : a.urlHi)
-    if (!img && a.fallback) img = this.assets.request(a.fallback)
+    // the SVG stand-in only when the real file failed (not while it is still loading)
+    if (!img && a.fallback && this.assets.hasFailed(wantHi ? a.urlHi : a.url)) img = this.assets.request(a.fallback)
     if (!img && a.role !== 'badge' && this.assets.hasFailed(wantHi ? a.urlHi : a.url) && !this.assets.hasFailed(a.url)) img = this.assets.request(a.url)
     if (!img) return
     let dw = a.w
@@ -454,7 +456,7 @@ export function collectAssetUrls(tl: Timeline, hiRes: boolean, style: RenderStyl
   const urls = new Set<string>()
   for (const m of tl.messages) {
     if (m.user && style.showBadges) {
-      for (const b of m.user.badges) {
+      for (const b of m.badges ?? m.user.badges) {
         const ov = style.badgeOverrides[b.set]
         if (ov) {
           urls.add(ov)

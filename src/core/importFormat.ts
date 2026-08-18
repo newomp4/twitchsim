@@ -24,6 +24,8 @@
  * "at" (absolute seconds) or "delay" (seconds after the previous line) are optional on every message.
  */
 
+import { normalizeHex } from './script'
+
 export interface ImportUser {
   name: string
   login?: string
@@ -58,7 +60,8 @@ export interface ImportDoc {
 
 /** Returns the parsed document if `text` is JSON in the import format, else null. */
 export function detectImport(text: string): ImportDoc | null {
-  const t = text.trim()
+  // AI output often comes wrapped in ```json fences
+  const t = text.trim().replace(/^`{3,}\s*json?\s*\n?/i, '').replace(/\n?`{3,}\s*$/, '').trim()
   if (!(t.startsWith('{') || t.startsWith('['))) return null
   try {
     const j = JSON.parse(t) as unknown
@@ -130,9 +133,15 @@ function userToken(u?: string): string {
 /** Converts an import document into script DSL text. */
 export function importToScript(doc: ImportDoc): string {
   const out: string[] = []
+  // messages reference users by display name; the cast is keyed by login
+  const loginOf = new Map<string, string>()
+  for (const u of doc.users ?? []) if (u && u.name) loginOf.set(clean(u.name).toLowerCase(), u.login ? clean(u.login) : clean(u.name).replace(/\s+/g, '_'))
+  const who = (name?: string) => (name && loginOf.get(clean(name).toLowerCase())) || name
   for (const u of doc.users ?? []) {
+    if (!u || !u.name) continue
     const flags = [...(u.badges ?? []).map(normalizeFlag)]
-    if (u.color) flags.push(`color:${u.color.startsWith('#') ? u.color : '#' + u.color}`)
+    const hex = u.color && normalizeHex(u.color)
+    if (hex) flags.push(`color:${hex}`)
     const name = u.login && u.login.toLowerCase() !== u.name.toLowerCase() ? `${u.name} (${u.login})` : u.name
     out.push(`!user ${name.replace(/\s+/g, '_').replace('_(', ' (')}${flags.length ? ' [' + flags.join(' ') + ']' : ''}`)
   }
@@ -144,9 +153,11 @@ export function importToScript(doc: ImportDoc): string {
     if (!m || typeof m !== 'object') continue
     const timing = typeof m.at === 'number' ? `@${m.at} ` : typeof m.delay === 'number' ? `+${m.delay} ` : ''
     const type = (m.type ?? 'chat').toLowerCase()
-    const user = userToken(m.user)
+    const user = userToken(who(m.user))
     const text = clean(m.text)
     const withUser = (t: string) => (user === '*' ? t : `${user}: ${t}`)
+    // a chat line without text would render as "name:" — skip it (events like subs/raids don't need text)
+    if ((type === 'chat' || type === 'message' || type === 'msg') && !text) continue
     switch (type) {
       case 'chat':
       case 'message':
@@ -185,9 +196,12 @@ export function importToScript(doc: ImportDoc): string {
       case 'gigantify':
         out.push(`${timing}!${type} ${withUser(text)}`)
         break
-      case 'reply':
-        out.push(`${timing}!reply ${userToken(m.target ?? m.to)}${user !== '*' ? ' | ' + user : ''}: ${text}`)
+      case 'reply': {
+        const target = userToken(who(m.target ?? m.to))
+        if (target === '*') out.push(`${timing}${withUser(text)}`) // nobody to reply to: plain line
+        else out.push(`${timing}!reply ${target}${user !== '*' ? ' | ' + user : ''}: ${text}`)
         break
+      }
       case 'reward':
       case 'redeem':
         out.push(`${timing}!reward ${clean(m.reward ?? 'Reward')} | ${withUser(text)}`)

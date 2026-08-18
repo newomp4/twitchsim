@@ -568,17 +568,20 @@ $.global.TWITCHSIM = (function () {
     try {
       var key = TAG + ':' + data.buildKey;
       var root = findFolderByComment(key);
-      // the main comp may have been moved anywhere in the project: find it by its tag, not by folder
-      var main = findCompByComment(TAG + '-main:' + data.buildKey);
+      // the main comp: the one in our folder if it is still there, else wherever the user moved it
+      var mainTag = TAG + '-main:' + data.buildKey;
+      var main = root ? findCompInFolder(root, mainTag) : null;
+      if (!main) main = findCompByComment(mainTag);
       if (main) {
         st.foreign = collectForeign(main);
         for (var i = main.numLayers; i >= 1; i--) if (isOurs(main.layer(i))) main.layer(i).remove();
       }
       if (root) {
-        // only OUR items go (comment tag); anything the user dropped into the folder stays
+        // only OUR generated items go (comment tag); anything the user dropped into the folder stays,
+        // and so does any duplicate of the main comp (a copy the user made keeps the tag)
         for (var j = root.numItems; j >= 1; j--) {
           var it = root.item(j);
-          if (it !== main && isOurs(it)) removeItemDeep(it);
+          if (it !== main && isOurs(it) && it.comment.indexOf(TAG + '-main:') !== 0) removeItemDeep(it);
         }
       } else {
         root = app.project.items.addFolder('TwitchSim \u00b7 ' + data.compName);
@@ -717,10 +720,15 @@ $.global.TWITCHSIM = (function () {
   function remove(json) {
     var a = args(json);
     var root = findFolderByComment(TAG + ':' + a.buildKey);
-    if (!root) return reply({ removed: false });
+    var main = findCompByComment(TAG + '-main:' + a.buildKey);
+    if (!root && !main) return reply({ removed: false });
     app.beginUndoGroup('TwitchSim: remove build');
     try {
-      removeItemDeep(root);
+      if (root) removeItemDeep(root);
+      // the main comp may live outside the folder; the matte solid lives in Solids
+      main = findCompByComment(TAG + '-main:' + a.buildKey);
+      if (main) main.remove();
+      removeTaggedItems(TAG + '-solid:' + a.buildKey);
     } finally {
       app.endUndoGroup();
     }

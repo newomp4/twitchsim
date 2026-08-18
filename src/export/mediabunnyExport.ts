@@ -1,4 +1,4 @@
-import { Output, WebMOutputFormat, Mp4OutputFormat, BufferTarget, StreamTarget, CanvasSource, Quality, canEncodeVideo, type VideoCodec } from 'mediabunny'
+import { Output, WebMOutputFormat, Mp4OutputFormat, BufferTarget, StreamTarget, CanvasSource, canEncodeVideo, type VideoCodec } from 'mediabunny'
 import type { CommonExportArgs, ExportResult } from './exporter'
 import { tick } from './exporter'
 import { guardedWritable } from './saveFile'
@@ -14,6 +14,9 @@ export async function exportWithMediabunny(a: MediabunnyArgs): Promise<ExportRes
   const { source, onProgress, signal, filename, mime, fileHandle } = a
   const { outW, outH } = source.geometry
   let codec: VideoCodec = a.codec
+  if (typeof VideoEncoder === 'undefined') {
+    throw new Error(window.isSecureContext ? 'This browser has no WebCodecs video encoder. Use Chrome / Edge, or the PNG sequence export.' : 'Video encoding needs a secure page (https:// or localhost). Open the hosted version, or use the PNG sequence export.')
+  }
   if (!(await canEncodeVideo(codec, { width: outW, height: outH }))) {
     const fallbacks: VideoCodec[] = a.container === 'mp4' ? ['avc', 'hevc', 'av1'] : ['vp9', 'vp8', 'av1']
     let found: VideoCodec | null = null
@@ -35,15 +38,17 @@ export async function exportWithMediabunny(a: MediabunnyArgs): Promise<ExportRes
   const bitrate = Math.min(120e6, Math.max(3e6, Math.round(pixels * source.fps * 0.14)))
   const videoSource = new CanvasSource(source.canvas, {
     codec,
-    bitrate: new Quality(bitrate),
+    // a plain number = bits per second (`new Quality(n)` would be a *quality level*, which broke H.264 on
+    // software encoders with "quantizer 0 / Infinity bps")
+    bitrate,
     alpha: a.alpha ? 'keep' : 'discard',
     keyFrameInterval: 2,
     hardwareAcceleration: a.alpha ? 'prefer-software' : 'no-preference',
   } as ConstructorParameters<typeof CanvasSource>[1])
   output.addVideoTrack(videoSource, { frameRate: source.fps, maximumPacketCount: Math.ceil(source.totalFrames * 1.34) + 16 })
-  await output.start()
   const total = source.totalFrames
   try {
+    await output.start()
     for (let i = 0; i < total; i++) {
       if (signal.aborted) throw new DOMException('cancelled', 'AbortError')
       source.render(i)

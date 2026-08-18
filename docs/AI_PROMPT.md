@@ -1,6 +1,6 @@
 # AI prompt for generating TwitchSim chat lines
 
-Paste this into ChatGPT / Claude / Gemini, fill in the `<placeholders>` at the bottom, and paste the lines it returns into the **Your lines** box (Chat tab) — or save them as a `.txt` file and use **Import file**.
+Paste this into ChatGPT / Claude / Gemini, fill in the `<placeholders>` at the bottom, and paste the lines it returns into the **Your lines** box (Chat tab) — or save them as a `.txt` file and use **Import**.
 
 The output format is deliberately simple: one `username: message` per line, optionally prefixed with `[mod]`, `[vip]` or `[sub]`.
 

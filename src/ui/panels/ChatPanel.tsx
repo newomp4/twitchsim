@@ -22,8 +22,11 @@ const MOODS: { value: Mood; label: string }[] = [
 export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Config>(k: K, v: Config[K]) => void }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [copied, setCopied] = useState(false)
-  const usesLines = cfg.mode === 'script' || cfg.mode === 'mixed'
   const usesFiller = cfg.mode !== 'script'
+  // "Filler only" + "re-use my lines" still needs the lines box
+  const usesLines = cfg.mode === 'script' || cfg.mode === 'mixed' || (usesFiller && cfg.fillerFromScript)
+  const orderedLines = cfg.mode === 'script' || cfg.mode === 'mixed'
+  const hasLines = !!cfg.script.trim()
   const scriptInfo = useMemo(() => {
     const doc = detectImport(cfg.script)
     if (doc) return `JSON detected: ${doc.users?.length ?? 0} users · ${doc.messages.length} messages`
@@ -68,7 +71,16 @@ export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Con
               <button type="button" className="btn small" onClick={copyPrompt} title="Copy a prompt for ChatGPT / Claude / Gemini that writes lines in this format">
                 {copied ? 'Copied ✓' : 'AI prompt'}
               </button>
-              <button type="button" className="btn small" onClick={() => set('script', SAMPLE_SCRIPT)} title="Replace the lines with the built-in example">
+              <button
+                type="button"
+                className="btn small"
+                title="Replace the lines with the built-in example"
+                onClick={() => {
+                  const n = cfg.script.split(/\r?\n/).filter((l) => l.trim()).length
+                  if (n > 3 && cfg.script !== SAMPLE_SCRIPT && !confirm(`Replace your ${n} lines with the example?`)) return
+                  set('script', SAMPLE_SCRIPT)
+                }}
+              >
                 Example
               </button>
               <button
@@ -102,11 +114,14 @@ export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Con
               spellCheck={false}
               rows={14}
               placeholder={'One message per line:\n\ncoolguy_92: yo chat what did i miss\nhe just clutched a 1v3 KEKW\n[mod] nightbot: welcome!\nxX_shadow_Xx: LETS GOOO'}
-              onDragOver={(e) => e.preventDefault()}
+              onDragOver={(e) => {
+                if (e.dataTransfer.types.includes('Files')) e.preventDefault()
+              }}
               onDrop={(e) => {
-                e.preventDefault()
                 const f = e.dataTransfer.files?.[0]
-                if (f) void importFile(f)
+                if (!f) return // plain text drops keep the browser's default behaviour
+                e.preventDefault()
+                void importFile(f)
               }}
             />
             <p className="hint">
@@ -120,10 +135,10 @@ export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Con
       {usesFiller && (
         <Section title="Filler chat">
           <Row>
-            {!(cfg.fillerFromScript && usesLines) && <Select label="Vibe" value={cfg.mood} options={MOODS} onChange={(v) => set('mood', v)} />}
+            {!cfg.fillerFromScript && <Select label="Vibe" value={cfg.mood} options={MOODS} onChange={(v) => set('mood', v)} />}
             {cfg.mode === 'mixed' && <Slider label="Filler messages between my lines" value={cfg.scriptGapMultiplier} min={0} max={20} step={1} onChange={(v) => set('scriptGapMultiplier', v)} />}
           </Row>
-          {usesLines && <Toggle label="Filler re-uses my own lines (shuffled) instead of generic chatter" value={cfg.fillerFromScript} onChange={(v) => set('fillerFromScript', v)} />}
+          <Toggle label="Filler re-uses my own lines (shuffled) instead of generic chatter" value={cfg.fillerFromScript} onChange={(v) => set('fillerFromScript', v)} />
         </Section>
       )}
 
@@ -143,8 +158,8 @@ export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Con
           <Toggle label="Regular intervals (metronomic)" value={cfg.pacing === 'even'} onChange={(v) => set('pacing', v ? 'even' : 'natural')} />
           <Toggle label="Start with the chat already full" value={cfg.prefillSec > 0} onChange={(v) => set('prefillSec', v ? 20 : 0)} />
         </Row>
-        {usesLines && <Toggle label="End right after my last line (loop-friendly)" value={cfg.durationAuto} onChange={(v) => set('durationAuto', v)} />}
-        {!cfg.durationAuto || !usesLines ? (
+        {orderedLines && hasLines && <Toggle label="End right after my last line (loop-friendly)" value={cfg.durationAuto} onChange={(v) => set('durationAuto', v)} />}
+        {!(cfg.durationAuto && orderedLines && hasLines) ? (
           <Slider label="Length" value={cfg.durationSec} min={1} max={600} onChange={(v) => set('durationSec', v)} format={(v) => `${v}s`} />
         ) : (
           <Slider label="Seconds after the last line" value={cfg.tailSec} min={0} max={60} step={0.5} onChange={(v) => set('tailSec', v)} format={(v) => `${v}s`} />
@@ -159,7 +174,7 @@ export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Con
         <Row>
           <TextInput label="Your username (mentions get highlighted)" value={cfg.viewerName} onChange={(v) => set('viewerName', v)} placeholder="optional" />
           <TextInput label="Seed (same seed = same chat)" value={cfg.seed} onChange={(v) => set('seed', v)} />
-          <button type="button" className="btn" onClick={() => set('seed', Math.random().toString(36).slice(2, 8))} title="Randomize">
+          <button type="button" className="btn" onClick={() => set('seed', Math.random().toString(36).slice(2, 8))} title="New random seed" aria-label="New random seed">
             🎲
           </button>
         </Row>

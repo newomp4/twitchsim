@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { Config } from '../../core/types'
 import type { ChannelData } from '../../core/channel'
 import { loadChannel } from '../../core/channel'
@@ -23,6 +23,8 @@ export function StylePanel({
   const [chanInput, setChanInput] = useState(cfg.loadedChannel)
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const streamerNameRef = useRef(cfg.streamerName)
+  streamerNameRef.current = cfg.streamerName
   const pct = (v: number) => `${Math.round(v * 100)}%`
   return (
     <>
@@ -140,7 +142,7 @@ export function StylePanel({
         </Row>
         <Row>
           <Slider label="Extra scale (text + badges + emotes)" value={cfg.fontScale} min={0.6} max={2.5} step={0.05} onChange={(v) => set('fontScale', v)} format={(v) => `${v.toFixed(2)}×`} />
-          <Slider label="Corner radius" value={cfg.cornerRadius} min={0} max={40} onChange={(v) => set('cornerRadius', v)} format={(v) => `${v}px`} />
+          <Slider label="Panel corner radius" value={cfg.cornerRadius} min={0} max={40} onChange={(v) => set('cornerRadius', v)} format={(v) => `${v}px`} hint="rounds the chat panel itself (no effect on the Transparent look)" />
         </Row>
         <Row>
           <Toggle label="Readable colors (Twitch default on)" value={cfg.readableColors} onChange={(v) => set('readableColors', v)} />
@@ -198,7 +200,10 @@ export function StylePanel({
               try {
                 const data = await loadChannel(chanInput)
                 setChannel(data)
-                patch({ loadedChannel: data.login, channelSubBadgeStyle: data.subBadges.length ? 'channel' : cfg.channelSubBadgeStyle, useChannelEmotes: true, streamerName: cfg.streamerName === 'Streamer' ? data.displayName : cfg.streamerName })
+                patch({ loadedChannel: data.login, useChannelEmotes: true })
+                if (data.subBadges.length) set('channelSubBadgeStyle', 'channel')
+                // only fill in the streamer name if the user hasn't typed one meanwhile
+                if (streamerNameRef.current === 'Streamer' || !streamerNameRef.current) set('streamerName', data.displayName)
               } catch (e) {
                 setErr((e as Error).message)
               } finally {
@@ -226,7 +231,7 @@ export function StylePanel({
           </p>
         )}
         {channel && <Toggle label="Use the loaded channel's emotes in filler chat" value={cfg.useChannelEmotes} onChange={(v) => set('useChannelEmotes', v)} />}
-        <p className="hint">Uses public community APIs (IVR, 7TV, FFZ); nothing is stored anywhere.</p>
+        <p className="hint">Uses public community APIs (IVR, 7TV, FFZ). Only the channel name is remembered; badges and emotes are fetched again next time.</p>
       </Collapsible>
     </>
   )

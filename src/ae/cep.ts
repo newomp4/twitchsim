@@ -101,7 +101,9 @@ export async function callHost<T = unknown>(fn: string, args?: unknown): Promise
 
 /** Forward slashes everywhere (ExtendScript hands out `C:\\Users\\…` on Windows, CEP accepts either). */
 export function posixPath(p: string): string {
-  return p.replace(/\\/g, '/').replace(/\/{2,}/g, '/').replace(/\/$/, '')
+  const unc = /^\\\\|^\/\//.test(p) // \\server\share (network project) keeps its double slash
+  const norm = p.replace(/\\/g, '/').replace(/\/{2,}/g, '/').replace(/\/$/, '')
+  return unc ? '/' + norm : norm
 }
 
 /** CEP hands system paths out as file:// URLs on some builds — normalize to plain paths. */
@@ -119,11 +121,12 @@ export function systemPath(type: 'userData' | 'extension' | 'myDocuments' | 'hos
 export function mkdirp(path: string): void {
   const fs = window.cep!.fs
   const norm = posixPath(path)
-  const parts = norm.split('/')
-  let cur = ''
+  const uncMatch = norm.match(/^\/\/[^/]+\/[^/]+/) // //server/share is a root, not something to create
+  const parts = (uncMatch ? norm.slice(uncMatch[0].length) : norm).split('/')
+  let cur = uncMatch ? uncMatch[0] + '/' : ''
   for (let i = 0; i < parts.length; i++) {
     const p = parts[i]
-    if (i === 0) {
+    if (i === 0 && !uncMatch) {
       // root: "" for /Users/… (absolute POSIX) or "C:" for Windows
       cur = p === '' ? '/' : /^[A-Za-z]:$/.test(p) ? p + '/' : p + '/'
       if (p !== '' && !/^[A-Za-z]:$/.test(p)) {

@@ -122,7 +122,9 @@ function mctx(): CanvasRenderingContext2D {
 }
 
 export function fontString(weight: number, size: number, family: string, italic = false): string {
-  return `${italic ? 'italic ' : ''}${weight} ${size}px "${family}", Inter, "Helvetica Neue", Helvetica, Arial, sans-serif`
+  // generic families (system-ui, sans-serif…) must not be quoted or they become unknown font names
+  const fam = /^(system-ui|ui-[a-z-]+|sans-serif|serif|monospace|cursive|fantasy)$/i.test(family) ? family : `"${family}"`
+  return `${italic ? 'italic ' : ''}${weight} ${size}px ${fam}, Inter, "Helvetica Neue", Helvetica, Arial, sans-serif`
 }
 
 export function fontMetrics(size: number, family: string): FontMetrics {
@@ -266,17 +268,17 @@ export function flow(atoms: Atom[], maxWidth: number, minAbove: number, minBelow
     if (atom.kind === 'text') {
       let rest = atom.text
       while (rest.length) {
-        // largest prefix that fits (binary search; never cut a surrogate pair / emoji in half)
+        // largest prefix that fits, measured at grapheme boundaries (never split an emoji / flag / ZWJ family)
         const avail = maxWidth - x
+        const bounds = graphemeBoundaries(rest)
         let lo = 1
-        let hi = rest.length
+        let hi = bounds.length - 1
         while (lo < hi) {
           const mid = (lo + hi + 1) >> 1
-          if (measure(rest.slice(0, mid), atom.style.font) <= avail) lo = mid
+          if (measure(rest.slice(0, bounds[mid]), atom.style.font) <= avail) lo = mid
           else hi = mid - 1
         }
-        let n = lo
-        if (n < rest.length && /[\uD800-\uDBFF]/.test(rest[n - 1])) n = Math.max(1, n - 1)
+        const n = bounds[Math.max(1, lo)]
         const piece = rest.slice(0, n)
         place({ ...atom, text: piece, w: measure(piece, atom.style.font) })
         rest = rest.slice(n)
@@ -298,6 +300,21 @@ export function flow(atoms: Atom[], maxWidth: number, minAbove: number, minBelow
     y += l.height
   }
   return lines
+}
+
+const segmenter: { segment(s: string): Iterable<{ index: number; segment: string }> } | null =
+  typeof Intl !== 'undefined' && 'Segmenter' in Intl ? new (Intl as unknown as { Segmenter: new (l: undefined, o: { granularity: string }) => { segment(s: string): Iterable<{ index: number; segment: string }> } }).Segmenter(undefined, { granularity: 'grapheme' }) : null
+
+/** Character offsets where the string may be cut: [0, …, length] at grapheme cluster boundaries. */
+function graphemeBoundaries(s: string): number[] {
+  const out = [0]
+  if (segmenter) {
+    for (const seg of segmenter.segment(s)) if (seg.index > 0) out.push(seg.index)
+  } else {
+    for (let i = 1; i < s.length; i++) if (!/[\uDC00-\uDFFF]/.test(s[i])) out.push(i) // at least keep surrogate pairs whole
+  }
+  out.push(s.length)
+  return out
 }
 
 export function atomWidth(a: Atom): number {
@@ -399,8 +416,9 @@ export function layoutMessage(msg: ChatMessage, env: LayoutEnv, tNow: number, in
       headerLines.push(...textLines)
     }
     const headerH = headerLines.reduce((s, l) => s + l.height, 0)
-    const blocks: Block[] = [{ y: 4 + style.padY, height: headerH, lines: headerLines, x: 4 + style.padX }]
-    let y = 4 + style.padY + headerH
+    // block y is relative to the row's *content* top (the 4px margin is added by the renderer)
+    const blocks: Block[] = [{ y: style.padY, height: headerH, lines: headerLines, x: 4 + style.padX }]
+    let y = style.padY + headerH
     if (msg.user && (msg.fragments.length > 0 || kind === 'announcement')) {
       const bodyAtoms = chatLineAtoms(msg, env, fm, false)
       const lines = flow(bodyAtoms, innerW, textAbove(style.lineHeight, fm), textBelow(style.lineHeight, fm))
@@ -409,7 +427,7 @@ export function layoutMessage(msg: ChatMessage, env: LayoutEnv, tNow: number, in
       blocks.push({ y, height: bh, lines, x: 4 + style.padX })
       y += bh
     }
-    const contentH = y - 4 + style.padY
+    const contentH = y + style.padY
     return { height: contentH + 8, marginTop: 4, marginBottom: 4, bg: c.noticeBg, borderLeft: barColor, borderWidth: 4, msgId: msg.id, blocks }
   }
 
@@ -490,14 +508,15 @@ function textBelow(lh: number, fm: FontMetrics): number {
 
 function ellipsize(text: string, font: string, maxW: number): string {
   if (measure(text, font) <= maxW) return text
+  const bounds = graphemeBoundaries(text)
   let lo = 0
-  let hi = text.length
+  let hi = bounds.length - 1
   while (lo < hi) {
     const mid = (lo + hi + 1) >> 1
-    if (measure(text.slice(0, mid) + '…', font) <= maxW) lo = mid
+    if (measure(text.slice(0, bounds[mid]) + '…', font) <= maxW) lo = mid
     else hi = mid - 1
   }
-  return text.slice(0, Math.max(0, lo)) + '…'
+  return text.slice(0, bounds[lo]) + '…'
 }
 
 /** Splits text into word / space atoms. */
@@ -633,7 +652,7 @@ function chatLineAtoms(msg: ChatMessage, env: LayoutEnv, fm: FontMetrics, delete
       case 'emote': {
         const big = i === lastEmoteIdx
         const box = big ? 112 * scale : emoteBox
-        const img = env.assets.get(env.hiRes ? f.url4x : f.url) ?? env.assets.get(f.url)
+        const img = env.assets.get(env.hiRes || big ? f.url4x : f.url) ?? env.assets.get(f.url)
         let w = box
         let h = box
         if (img && img.w > 0 && img.h > 0) {
@@ -655,7 +674,7 @@ function chatLineAtoms(msg: ChatMessage, env: LayoutEnv, fm: FontMetrics, delete
         const boxW = Math.max(box, w)
         atoms.push({
           kind: 'image',
-          url: f.url,
+          url: big ? f.url4x : f.url, // a giant emote always uses the 4× file
           urlHi: f.url4x,
           w,
           h,

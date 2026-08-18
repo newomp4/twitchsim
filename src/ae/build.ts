@@ -53,7 +53,15 @@ export function safeCompName(name: string): string {
 }
 
 export function buildKeyFor(compName: string): string {
-  return safeCompName(compName).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'chat'
+  const name = safeCompName(compName)
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'chat'
+  // "Chat" and "chat" (or two non-Latin names) must not share a folder/comp: add a short hash of the exact name
+  let h = 2166136261
+  for (let i = 0; i < name.length; i++) {
+    h ^= name.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  return `${slug}-${(h >>> 0).toString(36).slice(0, 5)}`
 }
 
 const yieldUI = () => new Promise<void>((r) => setTimeout(r, 0))

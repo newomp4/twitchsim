@@ -83,7 +83,12 @@ function parseFlags(src: string): { flags: UserFlags; rest: string } {
         case 'partner': case 'verified': flags.partner = true; break
         case 'bits': flags.bits = v ? parseInt(v, 10) || 100 : 100; break
         case 'gifter': flags.gifter = v ? parseInt(v, 10) || 1 : 1; break
-        case 'color': if (v) flags.color = v.startsWith('#') ? v : '#' + v; break
+        case 'color': {
+          // only real hex colours; anything else is ignored (never paint with an invalid fillStyle)
+          const hex = normalizeHex(v)
+          if (hex) flags.color = hex
+          break
+        }
       }
     }
     rest = rest.slice(m[0].length)
@@ -96,6 +101,15 @@ function splitUser(src: string): { user?: string; text: string } {
   const m = src.match(/^([A-Za-z0-9_][A-Za-z0-9_\-. ()À-￿]{0,40}?):\s+(.*)$/s)
   if (m && !m[1].includes(' ') && !/^https?$/i.test(m[1])) return { user: m[1], text: m[2] }
   return { text: src }
+}
+
+/** "#ff0000" / "ff0000" / "#f00" → "#rrggbb", or undefined when it isn't a colour */
+export function normalizeHex(v?: string): string | undefined {
+  if (!v) return undefined
+  const m = v.trim().match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i)
+  if (!m) return undefined
+  const h = m[1].length === 3 ? m[1].split('').map((c) => c + c).join('') : m[1]
+  return '#' + h.toLowerCase()
 }
 
 function parseTier(s?: string): 'prime' | 1 | 2 | 3 | undefined {
@@ -115,7 +129,7 @@ export function parseScript(srcRaw: string): ScriptEntry[] {
   const src = doc ? importToScript(doc) : srcRaw
   for (const rawLine of src.split(/\r?\n/)) {
     let line = rawLine.trim()
-    if (!line || line.startsWith('#') || line.startsWith('//')) continue
+    if (!line || line.startsWith('#') || line.startsWith('//') || /^`{3,}/.test(line)) continue // comments and stray ``` fences
     let timing: ScriptTiming = { kind: 'auto' }
     let m = line.match(/^@(\d+(?:\.\d+)?)\s+/)
     if (m) {
@@ -160,6 +174,7 @@ export function parseScript(srcRaw: string): ScriptEntry[] {
         case 'announce': case 'announcement': {
           const colors: Record<string, string> = { purple: '#9147ff', primary: '#9147ff', blue: '#1f69ff', green: '#00f593', orange: '#ffa500', red: '#e91916' }
           if (args[0] && colors[args[0].toLowerCase()]) out.push({ type: 'announce', timing, color: colors[args[0].toLowerCase()], text: args.slice(1).join(' ') })
+          else if (args[0] && normalizeHex(args[0])) out.push({ type: 'announce', timing, color: normalizeHex(args[0])!, text: args.slice(1).join(' ') })
           else out.push({ type: 'announce', timing, color: colors.purple, text: arg })
           break
         }
@@ -251,7 +266,11 @@ export function parseScript(srcRaw: string): ScriptEntry[] {
         case 'mod': out.push({ type: 'setuser', timing, user: args[0] ?? '', flags: { mod: true } }); break
         case 'unmod': out.push({ type: 'setuser', timing, user: args[0] ?? '', flags: {}, unmod: true }); break
         case 'vip': out.push({ type: 'setuser', timing, user: args[0] ?? '', flags: { vip: true } }); break
-        case 'color': out.push({ type: 'setuser', timing, user: args[0] ?? '', flags: { color: (args[1] ?? '#ff0000').startsWith('#') ? args[1] : '#' + args[1] } }); break
+        case 'color': {
+          const hex = normalizeHex(args[1])
+          if (args[0] && hex) out.push({ type: 'setuser', timing, user: args[0], flags: { color: hex } })
+          break
+        }
         default:
           // unknown command: treat as plain text so nothing is silently lost
           out.push({ type: 'chat', timing, flags: {}, text: line })

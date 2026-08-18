@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Section, Collapsible, copyText } from '../controls'
 import { AI_PROMPT } from '../../core/importFormat'
+import { isCEP } from '../../ae/cep'
 
 const EXAMPLE_JSON = `{
   "streamer": "MyStreamer",
@@ -59,7 +60,7 @@ xX_shadow_Xx: no way`}</pre>
 
       <Collapsible title="Advanced: scripted events, timing, JSON" hint="only if you want exact control">
         <p className="hint">Everything here is optional. Plain lines already give you a realistic chat.</p>
-        <pre className="help">{`@12.5 text                     at 12.5 s (absolute time)
+        <pre className="help cols">{`@12.5 text                     at 12.5 s (absolute time)
 +0.4 text                      0.4 s after the previous line
 !user name [mod sub:12 color:#ff69b4]   define a user's badges/color up-front
 [sub:12 prime] user: text      [sub:N] months, [prime] [turbo] [partner] [bits:1000] [gifter:5] [color:#hex] [broadcaster]
@@ -72,6 +73,9 @@ xX_shadow_Xx: no way`}</pre>
 !me [user:] text                !delete [user:] text
 !burst 20 KEKW                  20 users spam this at once
 !clear  !slow 5  !emoteonly  !system text  !speed 2  !mod user  !vip user
+!reward Name | user: text        !timeout user 600     !unmod user   !color user #hex
+!gigantify user: text KEKW      !effect rainbow-eclipse|simmer|cosmic-abyss user: text
+!slowoff  !emoteonlyoff  !followers 10  !subsonly
 
 {e} random emote · {e:laugh|hype|sad|scared|clap|love|jam|wave} · {streamer} · {game}`}</pre>
         <p className="hint">You can also paste a JSON file (users + messages + events); see docs/AI_PROMPT.md in the repo for the schema.</p>
@@ -80,6 +84,7 @@ xX_shadow_Xx: no way`}</pre>
         </Collapsible>
       </Collapsible>
 
+      {!isCEP() && (
       <Section title="Export formats">
         <ul className="help-list">
           <li>
@@ -97,6 +102,7 @@ xX_shadow_Xx: no way`}</pre>
           <li>Turn on <b>Stream to disk</b> for long / 4K exports. Chrome-based browsers are recommended (WebCodecs).</li>
         </ul>
       </Section>
+      )}
 
       <Section title="After Effects panel">
         <p className="hint">

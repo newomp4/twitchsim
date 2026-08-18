@@ -124,8 +124,8 @@ export const GLOBAL_BADGES: Record<string, Record<string, { id: string; title: s
 
 /** Twitch renders badges in a fixed order (authority first, subscriber, then misc, then Prime/Turbo). */
 const BADGE_ORDER = [
-  'broadcaster', 'staff', 'admin', 'global_mod', 'moderator', 'vip', 'partner', 'predictions',
-  'founder', 'subscriber',
+  'broadcaster', 'staff', 'admin', 'global_mod', 'moderator', 'vip', 'predictions',
+  'founder', 'subscriber', 'partner',
   'sub-gifter', 'sub-gift-leader', 'bits-leader', 'clips-leader', 'bits', 'hype-train', 'glhf-pledge', 'moments',
   'clip-champ', 'anonymous-cheerer', 'user-anniversary', 'gold-pixel-heart', 'share-the-love', 'rplace-2023',
   'superultracombo-2023', 'subtember-2024', 'subtember-2025', 'twitch-recap-2023', 'twitch-recap-2024', 'twitch-recap-2025',
@@ -240,7 +240,8 @@ export function generateSubBadgeSet(rng: Rng): GeneratedSubBadgeSet {
     const color = ramp[Math.min(i, ramp.length - 1)]
     const bg = bgStyle === 'none' ? 'none' : color
     const light = relLum(color) > 0.55
-    const glyph = bgStyle === 'none' ? color : glyphWhite && !light ? '#ffffff' : shade(color, light ? -0.6 : -0.45)
+    // dark glyphs only on light tiles: a darkened glyph on an already-dark tile is unreadable
+    const glyph = bgStyle === 'none' ? color : (glyphWhite || relLum(color) < 0.25) && !light ? '#ffffff' : shade(color, light ? -0.6 : -0.45)
     const stroke = bgStyle === 'none' ? `stroke="${shade(color, -0.4)}" stroke-width="0.8"` : ''
     let bgEl = ''
     if (bgStyle === 'round') bgEl = `<rect x="0.5" y="0.5" width="17" height="17" rx="3.5" fill="${bg}"/>`

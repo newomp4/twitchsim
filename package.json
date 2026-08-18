@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "build:pages": "GITHUB_PAGES=1 vite build",
     "deploy": "npm run build:pages && gh-pages -d dist -m \"Deploy to GitHub Pages\"",
-    "build:cep": "TWITCHSIM_CEP=1 vite build",
+    "build:cep": "vite build --mode cep",
     "cep:install": "npm run build:cep && node scripts/install-cep.mjs",
     "cep:link": "npm run build:cep && node scripts/install-cep.mjs --link"
   },
@@ -40,5 +40,8 @@
     "url": "https://github.com/newomp4/twitchsim.git"
   },
   "license": "MIT",
-  "homepage": "https://newomp4.github.io/twitchsim/"
+  "homepage": "https://newomp4.github.io/twitchsim/",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  }
 }

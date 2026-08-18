@@ -29,6 +29,11 @@ function enableDebugMode() {
   try {
     if (process.platform === 'darwin') {
       for (const v of versions) execSync(`defaults write com.adobe.CSXS.${v} PlayerDebugMode 1`, { stdio: 'ignore' })
+      try {
+        execSync('killall cfprefsd', { stdio: 'ignore' }) // flush the prefs cache so a running AE picks the flag up
+      } catch {
+        /* not running */
+      }
     } else if (process.platform === 'win32') {
       for (const v of versions) execSync(`reg add HKCU\\Software\\Adobe\\CSXS.${v} /v PlayerDebugMode /t REG_SZ /d 1 /f`, { stdio: 'ignore' })
     }
@@ -40,8 +45,10 @@ function enableDebugMode() {
 
 const dest = join(extensionsDir(), ID)
 if (args.has('--uninstall')) {
-  if (existsSync(dest) || isLink(dest)) rmSync(dest, { recursive: true, force: true })
-  console.log(`✓ Removed ${dest}`)
+  if (existsSync(dest) || isLink(dest)) {
+    rmSync(dest, { recursive: true, force: true })
+    console.log(`✓ Removed ${dest}`)
+  } else console.log(`Nothing installed at ${dest}`)
   process.exit(0)
 }
 if (!existsSync(join(src, 'client', 'index.html'))) {
@@ -51,7 +58,8 @@ if (!existsSync(join(src, 'client', 'index.html'))) {
 mkdirSync(dirname(dest), { recursive: true })
 if (existsSync(dest) || isLink(dest)) rmSync(dest, { recursive: true, force: true })
 if (args.has('--link')) {
-  symlinkSync(src, dest, 'dir')
+  // a junction needs no admin rights / Developer Mode on Windows
+  symlinkSync(src, dest, process.platform === 'win32' ? 'junction' : 'dir')
   console.log(`✓ Linked ${dest} → ${src}`)
 } else {
   cpSync(src, dest, { recursive: true, dereference: true })

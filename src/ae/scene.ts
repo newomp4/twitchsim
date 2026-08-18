@@ -5,7 +5,7 @@
  *
  * Structure produced (see cep/host/index.jsx for the AE side):
  *   Main comp
- *     ├ Top fade matte (optional)
+ *     ├ Chat area (matte) — clips rows to the chat rect, carries the optional top fade
  *     ├ msg NNN · user   ← one precomp per message, static position, parented to "Scroll"
  *     ├ Scroll (null)    ← the ONE animated property: every push-up of the stack lives here
  *     ├ Background (shape, optional)
@@ -555,7 +555,7 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
   for (const c of jumps) {
     if (c <= 0 || c > durationSec) continue
     times.add(rt(c))
-    const before = rt(Math.max(0, c - frameDur))
+    const before = rt(Math.max(0, c - 0.001)) // hold right up to the jump
     times.add(before)
     holdBefore.add(before)
   }
@@ -600,16 +600,24 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
     if (inT >= durationSec) continue // generated past the end of the comp: never visible
     if (hiddenAt[i] <= inT) continue // wiped by a /clear before it could ever show
     const hMax = Math.max(h[i], layoutsDel[i]?.height ?? 0)
-    // out point: first key time where the row is fully above the top edge, or the clear that hides it
+    // out point: the row's *last* exit above the top edge (the stack can shrink again when a newer row's
+    // "deleted" layout is shorter — the canvas slides everything back down), or the clear that hides it
     let outT = Math.min(durationSec, hiddenAt[i])
-    const threshold = H - pb + C[i] + hMax
-    for (let j = 0; j < keyTimes.length; j++) {
-      if (keyTimes[j] < inT) continue
-      if (keyTimes[j] >= hiddenAt[i]) break
-      if (Skeys[j] >= threshold - 1e-6) {
-        outT = Math.min(outT, keyTimes[j])
-        break
+    {
+      const jumpsAbove: { at: number; d: number }[] = []
+      for (let k = 0; k < i; k++) if (epoch[k] === epoch[i] && del[k] !== Infinity && layoutsDel[k] && del[k] > t[i]) jumpsAbove.push({ at: del[k], d: layoutsDel[k]!.height - h[k] })
+      let above: number | null = null
+      for (let j = 0; j < keyTimes.length; j++) {
+        if (keyTimes[j] < inT) continue
+        if (keyTimes[j] >= hiddenAt[i]) break
+        let localTop = C[i]
+        for (const jp of jumpsAbove) if (keyTimes[j] >= jp.at) localTop += jp.d
+        const threshold = H - pb + localTop + hMax
+        if (Skeys[j] >= threshold - 1e-6) {
+          if (above === null) above = keyTimes[j]
+        } else above = null
       }
+      if (above !== null) outT = Math.min(outT, above)
     }
     if (outT <= inT) outT = Math.min(durationSec, inT + frameDur)
     const layerStart = inT
@@ -652,11 +660,11 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
           return v
         }
         const times = new Set<number>([rt(inT)])
-        for (const k of growing) if (t[k] + gdur > inT) times.add(rt(t[k] + gdur))
+        for (const k of growing) if (t[k] + gdur > inT) times.add(rt(Math.min(durationSec, t[k] + gdur))) // an end key even if the growth outlives the comp
         const holdAt = new Set<number>()
         for (const j of jumps) {
           times.add(rt(j.at))
-          const before = rt(Math.max(inT, j.at - frameDur))
+          const before = rt(Math.max(inT, j.at - 0.001)) // hold right up to the jump (a whole frame earlier showed a stale frame)
           times.add(before)
           holdAt.add(before)
         }

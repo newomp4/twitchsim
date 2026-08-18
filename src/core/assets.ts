@@ -26,6 +26,8 @@ export class AssetCache {
   version = 0
   onChange: (() => void) | null = null
   animated = true
+  /** bumped by clear(): loads started before are ignored when they land */
+  private generation = 0
 
   get(url: string): LoadedImage | undefined {
     return this.cache.get(url)
@@ -47,8 +49,10 @@ export class AssetCache {
     if (this.failed.has(url)) return Promise.resolve(null)
     let p = this.pending.get(url)
     if (p) return p
+    const gen = this.generation
     p = this.doLoad(url)
       .then((img) => {
+        if (gen !== this.generation) return img // cache was cleared meanwhile (e.g. animation mode flipped)
         if (img) this.cache.set(url, img)
         else this.failed.add(url)
         this.pending.delete(url)
@@ -57,6 +61,7 @@ export class AssetCache {
         return img
       })
       .catch(() => {
+        if (gen !== this.generation) return null
         this.failed.add(url)
         this.pending.delete(url)
         this.version++
@@ -120,6 +125,8 @@ export class AssetCache {
     }
     this.cache.clear()
     this.failed.clear()
+    this.pending.clear()
+    this.generation++
     this.version++
   }
 }

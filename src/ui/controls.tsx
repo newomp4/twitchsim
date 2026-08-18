@@ -39,12 +39,29 @@ export function Slider({ label, value, min, max, step = 1, onChange, format, hin
     const snapped = Math.round(raw / step) * step
     return Math.min(max, Math.max(min, snapped))
   }
+  // while dragging a log slider the thumb follows the pointer (several positions round to the same value)
+  const [dragPos, setDragPos] = useState<number | null>(null)
   return (
     <label className="field slider">
       <span className="lbl">
         {label} <b>{format ? format(value) : value}</b>
       </span>
-      <input type="range" min={log ? 0 : min} max={log ? 1000 : max} step={log ? 1 : step} value={toPos(value)} onChange={(e) => onChange(fromPos(parseFloat(e.target.value)))} />
+      <input
+        type="range"
+        min={log ? 0 : min}
+        max={log ? 1000 : max}
+        step={log ? 1 : step}
+        value={dragPos ?? toPos(value)}
+        aria-label={label}
+        onChange={(e) => {
+          const p = parseFloat(e.target.value)
+          if (log) setDragPos(p)
+          onChange(fromPos(p))
+        }}
+        onPointerUp={() => setDragPos(null)}
+        onBlur={() => setDragPos(null)}
+        onKeyUp={() => setDragPos(null)}
+      />
       {hint && <span className="fhint">{hint}</span>}
     </label>
   )
@@ -118,13 +135,13 @@ export function NumberInput({ label, value, onChange, min, max, step, hint }: { 
 
 export function ColorInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
-    <label className="field color">
+    <div className="field color">
       <span className="lbl">{label}</span>
       <span className="colorwrap">
-        <input type="color" value={/^#[0-9a-f]{6}$/i.test(value) ? value : '#000000'} onChange={(e) => onChange(e.target.value)} />
-        <input type="text" value={value} onChange={(e) => onChange(e.target.value)} />
+        <input type="color" aria-label={`${label} (picker)`} value={/^#[0-9a-f]{6}$/i.test(value) ? value : '#000000'} onChange={(e) => onChange(e.target.value)} />
+        <input type="text" aria-label={`${label} (hex)`} value={value} onChange={(e) => onChange(e.target.value)} />
       </span>
-    </label>
+    </div>
   )
 }
 
@@ -162,8 +179,10 @@ export function Collapsible({ title, children, defaultOpen = false, hint }: { ti
   return (
     <section className={'sec collapsible' + (open ? ' open' : '')}>
       <button type="button" className="collapse-head" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <span className="chev">{open ? '▾' : '▸'}</span>
-        <h3>{title}</h3>
+        <span className="chev" aria-hidden>
+          {open ? '▾' : '▸'}
+        </span>
+        <span className="ctitle">{title}</span>
         {hint && !open && <span className="chint">{hint}</span>}
       </button>
       {open && <div className="collapse-body">{children}</div>}

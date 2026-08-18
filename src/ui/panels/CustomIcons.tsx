@@ -15,7 +15,7 @@ export function CustomIcons({ cfg, set, patch }: { cfg: Config; set: <K extends 
   const [err, setErr] = useState<string | null>(null)
   const radiusCss = `${Math.min(50, cfg.badgeRadius * 100)}%`
   const badges = cfg.customBadges
-  const subs = badges.filter((b) => b.kind === 'sub').sort((a, b) => (a.months ?? 0) - (b.months ?? 0))
+  const subs = badges.filter((b) => b.kind === 'sub') // upload order (sorting while you type a tier would move the field under your cursor)
   const reps = badges.filter((b) => b.kind === 'replace')
   const extras = badges.filter((b) => b.kind === 'extra')
 
@@ -84,7 +84,7 @@ export function CustomIcons({ cfg, set, patch }: { cfg: Config; set: <K extends 
       <p className="hint">Upload any image — it's fitted into Twitch's square badge box for you and the corners are rounded (adjustable). PNG with transparency looks best; JPG/GIF/WebP/SVG also work.</p>
       <Row>
         <Field label="Fit uploads">
-          <Segmented value={cfg.badgeFit} onChange={(v) => void changeFit(v)} options={[{ value: 'cover', label: 'Crop to square', title: 'Center-crop so the image fills the badge (like Twitch badges)' }, { value: 'contain', label: 'Fit inside', title: 'Nothing cropped; transparent padding' }]} />
+          <Segmented value={cfg.badgeFit} onChange={(v) => { if (!busy) void changeFit(v) }} options={[{ value: 'cover', label: 'Crop to square', title: 'Center-crop so the image fills the badge (like Twitch badges)' }, { value: 'contain', label: 'Fit inside', title: 'Nothing cropped; transparent padding' }]} />
         </Field>
         <Slider label="Corner rounding" value={cfg.badgeRadius} min={0} max={0.5} step={0.01} onChange={(v) => set('badgeRadius', v)} format={(v) => (v === 0 ? 'square' : v >= 0.5 ? 'circle' : `${Math.round(v * 100)}%`)} />
       </Row>
@@ -108,7 +108,7 @@ export function CustomIcons({ cfg, set, patch }: { cfg: Config; set: <K extends 
                     <span>months ≥</span>
                     <input type="number" min={0} max={999} value={b.months ?? 0} onChange={(e) => updateBadge(b.id, { months: parseInt(e.target.value, 10) || 0, name: `${parseInt(e.target.value, 10) || 0}-Month Subscriber` })} />
                   </label>
-                  <button type="button" className="x" title="Remove" onClick={() => removeBadge(b.id)}>
+                  <button type="button" className="x" title="Remove" aria-label="Remove" onClick={() => removeBadge(b.id)}>
                     ×
                   </button>
                 </div>
@@ -140,7 +140,7 @@ export function CustomIcons({ cfg, set, patch }: { cfg: Config; set: <K extends 
               <div key={b.id} className="upl-item">
                 <img src={b.src} alt="" style={{ borderRadius: radiusCss }} />
                 <span className="upl-name">{b.name}</span>
-                <button type="button" className="x" title="Remove" onClick={() => removeBadge(b.id)}>
+                <button type="button" className="x" title="Remove" aria-label="Remove" onClick={() => removeBadge(b.id)}>
                   ×
                 </button>
               </div>
@@ -168,7 +168,7 @@ export function CustomIcons({ cfg, set, patch }: { cfg: Config; set: <K extends 
                   <span>{Math.round((b.ratio ?? 0) * 100)}% of chatters</span>
                   <input type="range" min={0} max={1} step={0.01} value={b.ratio ?? 0} onChange={(e) => updateBadge(b.id, { ratio: parseFloat(e.target.value) })} />
                 </label>
-                <button type="button" className="x" title="Remove" onClick={() => removeBadge(b.id)}>
+                <button type="button" className="x" title="Remove" aria-label="Remove" onClick={() => removeBadge(b.id)}>
                   ×
                 </button>
               </div>
@@ -193,7 +193,7 @@ export function CustomIcons({ cfg, set, patch }: { cfg: Config; set: <K extends 
                 <div key={e.id} className="upl-item">
                   <img src={e.src} alt="" className="emote" />
                   <input type="text" value={e.name} onChange={(ev) => set('customEmotes', cfg.customEmotes.map((x) => (x.id === e.id ? { ...x, name: ev.target.value.replace(/\s+/g, '') } : x)))} placeholder="emoteName" />
-                  <button type="button" className="x" title="Remove" onClick={() => set('customEmotes', cfg.customEmotes.filter((x) => x.id !== e.id))}>
+                  <button type="button" className="x" title="Remove" aria-label="Remove" onClick={() => set('customEmotes', cfg.customEmotes.filter((x) => x.id !== e.id))}>
                     ×
                   </button>
                 </div>
@@ -206,7 +206,14 @@ export function CustomIcons({ cfg, set, patch }: { cfg: Config; set: <K extends 
       {busy && <p className="hint">Processing…</p>}
       {err && <p className="err">{err}</p>}
       {(badges.length > 0 || cfg.customEmotes.length > 0) && (
-        <button type="button" className="btn small" onClick={() => patch({ customBadges: [], customEmotes: [], channelSubBadgeStyle: cfg.channelSubBadgeStyle === 'custom' ? 'generated' : cfg.channelSubBadgeStyle })}>
+        <button
+          type="button"
+          className="btn small"
+          onClick={() => {
+            if (!confirm('Remove all uploaded badges and emotes?')) return
+            patch({ customBadges: [], customEmotes: [], channelSubBadgeStyle: cfg.channelSubBadgeStyle === 'custom' ? 'generated' : cfg.channelSubBadgeStyle })
+          }}
+        >
           Remove all uploads
         </button>
       )}

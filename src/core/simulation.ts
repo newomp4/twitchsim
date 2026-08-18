@@ -43,6 +43,36 @@ interface Ctx {
   lastScriptUser?: Chatter
   /** user lines re-used as filler (when cfg.fillerFromScript) */
   fillerPool?: { user?: string; text: string }[]
+  /** simulation time (ms) of the script entry / event currently being applied — stamps badge changes */
+  now: number
+  /** timeouts / bans from the script, applied to the finished timeline (also to filler chat) */
+  bans: { user: Chatter; t: number; untilMs: number }[]
+}
+
+/** A chatter's badge/color state as of a moment; ambient messages are generated later and look this up. */
+interface BadgeState {
+  t: number
+  /** next message id at the time of the change (script order) */
+  seq: number
+  badges: Badge[]
+  color: string | null
+}
+const badgeHistory = new WeakMap<Chatter, BadgeState[]>()
+function recordBadgeState(ctx: Ctx, c: Chatter, before: { badges: Badge[]; color: string | null } | null): void {
+  let h = badgeHistory.get(c)
+  if (!h) {
+    h = [{ t: -Infinity, seq: 0, badges: before ? before.badges : c.badges, color: before ? before.color : c.color }]
+    badgeHistory.set(c, h)
+  }
+  h.push({ t: ctx.now, seq: ctx.nextId, badges: c.badges, color: c.color })
+}
+/** state of chatter c for a message created with id at time t */
+function badgeStateFor(c: Chatter, id: number, t: number): BadgeState | null {
+  const h = badgeHistory.get(c)
+  if (!h) return null
+  let best: BadgeState | null = null
+  for (const e of h) if (e.t <= t && e.seq <= id) best = e
+  return best ?? h[0]
 }
 
 const PERSONAS = ['normal', 'emoter', 'yapper', 'questioner', 'backseater', 'hater', 'wholesome', 'spammer', 'lurker']
@@ -100,6 +130,8 @@ export function buildTimeline(inputs: SimInputs): Timeline {
     byLogin: new Map(),
     recent: [],
     nextId: 1,
+    now: -Infinity,
+    bans: [],
     badgeOpts,
     streamerDisplay,
     streamerLogin,
@@ -139,8 +171,9 @@ export function buildTimeline(inputs: SimInputs): Timeline {
     let waitMs = 0
     for (const e of entries) {
       if (e.type === 'user' || e.type === 'setuser') {
-        // cast definitions don't take time
-        applyScriptEntry(ctx, e, prev, messages, clears)
+        // cast definitions / role changes don't take a slot; "@N !mod bob" applies at that moment though
+        const at = e.timing.kind === 'at' ? e.timing.sec * 1000 : e.timing.kind === 'after' ? prev + e.timing.sec * 1000 : prev
+        applyScriptEntry(ctx, e, at, messages, clears)
         continue
       }
       const autoGap =
@@ -153,6 +186,11 @@ export function buildTimeline(inputs: SimInputs): Timeline {
         // "!wait N": the next line comes exactly N seconds after the previous one (waits add up)
         waitMs += e.sec * 1000
         first = false
+        continue
+      }
+      if (e.type === 'speed' && e.timing.kind === 'auto' && waitMs === 0) {
+        // a rate change takes no time of its own: it applies from the previous line on
+        speedChanges.push({ t: prev, mult: e.mult })
         continue
       }
       let t: number
@@ -191,7 +229,33 @@ export function buildTimeline(inputs: SimInputs): Timeline {
   const ambient = cfg.mode === 'ambient' || cfg.mode === 'hype' || cfg.mode === 'mixed' || (cfg.mode === 'script' && !useScript)
   if (ambient) generateAmbient(ctx, durationMs, speedChanges, messages, -prefillMs)
 
-  // ---- 4) order, ids, deletions/clears -------------------------------------
+  // ---- 4) script state applied to filler chat -------------------------------------
+  // filler messages were generated with each chatter's *final* badges/color; give every message the state
+  // that was current when it was said (mods promoted later, resubs, !user definitions, ...)
+  for (const m of messages) {
+    if (!m.user) continue
+    const st = badgeStateFor(m.user, m.id, m.t)
+    if (st) {
+      m.badges = st.badges
+      m.color = st.color
+    }
+  }
+  // timeouts / bans: earlier lines get deleted, nothing from that user while it lasts
+  if (ctx.bans.length) {
+    const drop = new Set<ChatMessage>()
+    for (const b of ctx.bans) {
+      for (const m of messages) {
+        if (m.user !== b.user || m.notice) continue
+        if (m.t <= b.t && !m.deletedAt) m.deletedAt = b.t
+        else if (m.t > b.t && m.t < b.untilMs) drop.add(m)
+      }
+    }
+    if (drop.size) {
+      for (let i = messages.length - 1; i >= 0; i--) if (drop.has(messages[i])) messages.splice(i, 1)
+    }
+  }
+
+  // ---- 5) order, ids, deletions/clears -------------------------------------
   messages.sort((a, b) => a.t - b.t || a.id - b.id)
   if (cfg.pacing === 'even') {
     evenOut(messages, baseGapMs, speedChanges)
@@ -212,19 +276,19 @@ export function buildTimeline(inputs: SimInputs): Timeline {
 function buildChatters(ctx: Ctx): void {
   const { rng, cfg } = ctx
   const custom = parseCustomNames(cfg.customNames)
-  const n = Math.max(3, Math.min(5000, cfg.chatterPoolSize))
+  // "only my usernames" = exactly those names, no invented ones; otherwise the pool is at least big enough for all of them
+  const n = custom.length && cfg.customNamesOnly ? custom.length : Math.max(3, Math.min(5000, Math.max(cfg.chatterPoolSize, custom.length)))
   const persWeights = PERSONA_WEIGHTS[cfg.mood] ?? PERSONA_WEIGHTS.chill
   const usedLogins = new Set<string>()
   const list: Chatter[] = []
   for (let i = 0; i < n; i++) {
-    let name = custom.length && (cfg.customNamesOnly || i < custom.length) ? custom[i % custom.length] : generateName(rng, cfg.localizedNamesRatio)
+    let name = custom.length && i < custom.length ? custom[i] : generateName(rng, cfg.localizedNamesRatio)
     let guard = 0
     while (usedLogins.has(name.login) && guard++ < 20) {
-      if (custom.length && cfg.customNamesOnly) {
-        const suffix = rng.int(1, 999)
-        name = { login: name.login + suffix, displayName: name.displayName + suffix }
-      } else name = generateName(rng, cfg.localizedNamesRatio)
+      if (custom.length && i < custom.length) break // duplicate in the user's own list: skip it below
+      name = generateName(rng, cfg.localizedNamesRatio)
     }
+    if (usedLogins.has(name.login)) continue
     usedLogins.add(name.login)
     const c = newChatter(ctx, list.length, name.login, name.displayName, rng.weighted(PERSONAS, persWeights))
     // Zipf-ish weight: a few users chat a lot, most rarely.
@@ -247,7 +311,7 @@ function buildChatters(ctx: Ctx): void {
   ctx.broadcaster = bc
   list.push(bc)
   // bots
-  if (cfg.botsEnabled) {
+  if (cfg.botsEnabled && !(cfg.customNamesOnly && cfg.customNames.trim())) {
     const botDefs = [BOT_NAMES[0], BOT_NAMES[1]]
     for (const b of botDefs) {
       const bot = newChatter(ctx, list.length, b.login, b.displayName, 'normal')
@@ -338,11 +402,13 @@ function resolveUser(ctx: Ctx, name: string | undefined, flags?: UserFlags): Cha
 }
 
 function applyFlags(ctx: Ctx, c: Chatter, f: UserFlags): void {
+  const before = { badges: c.badges, color: c.color }
   if (f.mod) c.isMod = true
   if (f.vip) c.isVip = true
   if (f.broadcaster) c.isBroadcaster = true
   if (f.subMonths !== undefined) {
-    c.subMonths = f.subMonths
+    // a bare [sub] (=1) must not demote a 12-month sub
+    c.subMonths = Math.max(c.subMonths, f.subMonths)
     c.subTier = c.subTier || 1
   }
   if (f.prime) c.isPrime = true
@@ -352,12 +418,11 @@ function applyFlags(ctx: Ctx, c: Chatter, f: UserFlags): void {
   const had = (set: string) => c.badges.some((b) => b.set === set)
   const keep = (set: string) => c.badges.find((b) => b.set === set)!
   const badges: Badge[] = c.badges.filter((b) => !['broadcaster', 'moderator', 'vip', 'subscriber', 'founder', 'premium', 'turbo', 'partner', 'bits', 'sub-gifter'].includes(b.set))
-  if (f.broadcaster || had('broadcaster')) badges.push(makeBadge('broadcaster', '1'))
+  if (f.broadcaster || c.isBroadcaster || had('broadcaster')) badges.push(makeBadge('broadcaster', '1'))
   else if (f.mod || had('moderator')) badges.push(makeBadge('moderator', '1'))
   else if (f.vip || had('vip')) badges.push(makeBadge('vip', '1'))
-  if (f.founder) badges.push(makeBadge('founder', '0'))
+  if (f.founder || had('founder')) badges.push(makeBadge('founder', '0'))
   else if (f.subMonths !== undefined) badges.push(subBadgeFor(c.subMonths, ctx.badgeOpts))
-  else if (had('founder')) badges.push(keep('founder'))
   else if (had('subscriber')) badges.push(keep('subscriber'))
   if (f.bits) badges.push(makeBadge('bits', bitsBadgeVersion(f.bits)))
   else if (had('bits')) badges.push(keep('bits'))
@@ -367,20 +432,22 @@ function applyFlags(ctx: Ctx, c: Chatter, f: UserFlags): void {
   else if (f.turbo || had('turbo')) badges.push(makeBadge('turbo', '1'))
   if (f.partner || had('partner')) badges.push(makeBadge('partner', '1'))
   c.badges = sortBadges(badges)
+  recordBadgeState(ctx, c, before)
 }
 
-function pickChatter(ctx: Ctx, exclude?: Chatter): Chatter {
+function pickChatter(ctx: Ctx, exclude?: Chatter, allowBroadcaster = false): Chatter {
   const { rng } = ctx
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 8; i++) {
     const c = rng.weighted(ctx.chatters, ctx.weights)
-    if (c !== exclude && !c.isBot) return c
+    if (c !== exclude && !c.isBot && (allowBroadcaster || !c.isBroadcaster)) return c
   }
-  return ctx.chatters[0]
+  return ctx.chatters.find((c) => !c.isBot && !c.isBroadcaster && c !== exclude) ?? ctx.chatters[0]
 }
 
 /** A brand-new one-off chatter (first-time chatters, raiders). */
 function freshChatter(ctx: Ctx, persona = 'normal', badgeless = false): Chatter {
   const { rng, cfg } = ctx
+  if (cfg.customNamesOnly && cfg.customNames.trim()) return pickChatter(ctx) // never invent names the user didn't list
   let name = generateName(rng, cfg.localizedNamesRatio)
   let guard = 0
   while (ctx.byLogin.has(name.login) && guard++ < 10) name = generateName(rng, cfg.localizedNamesRatio)
@@ -555,6 +622,8 @@ function genText(ctx: Ctx, user: Chatter): string {
 
 function makeMessage(ctx: Ctx, t: number, user: Chatter | undefined, text: string, extra: Partial<ChatMessage> = {}): ChatMessage {
   const { cfg, registry } = ctx
+  // Twitch caps messages at 500 characters (also keeps pathological words from stalling the layout)
+  if (text.length > 500) text = text.slice(0, 500)
   const parsed = user
     ? parseMessage(text, { registry, selfLogin: cfg.viewerName || undefined, cheers: true, animatedCheermotes: cfg.animatedEmotes })
     : { fragments: [{ kind: 'text', text }] as Fragment[], bits: 0 }
@@ -563,8 +632,7 @@ function makeMessage(ctx: Ctx, t: number, user: Chatter | undefined, text: strin
     t,
     user,
     fragments: parsed.fragments,
-    // Twitch caps messages at 500 characters (also keeps pathological words from stalling the layout)
-    text: text.length > 500 ? text.slice(0, 500) : text,
+    text,
     // badges / color as they are *now*: later !mod / !sub / gift notices must not restyle older rows
     badges: user?.badges,
     color: user ? user.color : undefined,
@@ -592,6 +660,7 @@ function tierLabel(tier: 'prime' | 1 | 2 | 3): string {
 }
 
 function subNotice(ctx: Ctx, t: number, user: Chatter, tier: 'prime' | 1 | 2 | 3, months: number, message?: string, streak?: number): ChatMessage {
+  ctx.now = t
   const parts: NoticePart[] = [{ text: user.displayName, bold: true, color: 'name' }, { text: ' ' }, { text: 'Subscribed', bold: true }]
   if (tier === 'prime') parts.push({ text: ' with ' }, { text: 'Prime', color: 'link' }, { text: '.' })
   else parts.push({ text: ` at ${tierLabel(tier)}.` })
@@ -613,6 +682,7 @@ function subNotice(ctx: Ctx, t: number, user: Chatter, tier: 'prime' | 1 | 2 | 3
 }
 
 function giftNotice(ctx: Ctx, t: number, gifter: Chatter | null, recipient: Chatter, tier: 1 | 2 | 3, total?: number): ChatMessage {
+  ctx.now = t
   const parts: NoticePart[] = gifter
     ? [{ text: gifter.displayName, bold: true, color: 'name' }, { text: ` gifted a ${tierLabel(tier)} sub to ` }, { text: recipient.displayName, bold: true, color: 'name' }, { text: '!' }]
     : [{ text: 'An anonymous user', bold: true }, { text: ` gifted a ${tierLabel(tier)} sub to ` }, { text: recipient.displayName, bold: true, color: 'name' }, { text: '!' }]
@@ -652,6 +722,7 @@ function announcement(ctx: Ctx, t: number, color: string, text: string, user?: C
 function applyScriptEntry(ctx: Ctx, e: ScriptEntry, t: number, out: ChatMessage[], clears: number[]): ChatMessage[] {
   const { rng, cfg } = ctx
   const even = cfg.pacing === 'even'
+  ctx.now = t
   const produced: ChatMessage[] = []
   const push = (m: ChatMessage) => {
     out.push(m)
@@ -659,7 +730,15 @@ function applyScriptEntry(ctx: Ctx, e: ScriptEntry, t: number, out: ChatMessage[
   }
   switch (e.type) {
     case 'chat': {
+      const isNew = !!e.user && !ctx.byLogin.has(e.user.toLowerCase().replace(/[^a-z0-9_]/g, '_'))
       const user = e.user ? resolveUser(ctx, e.user, e.flags) : e.first ? freshChatter(ctx, 'normal', true) : pickChatter(ctx, ctx.lastScriptUser)
+      if (e.first && isNew && !Object.keys(e.flags).length) {
+        // a named first-time chatter is brand new: no sub / bits history yet
+        user.badges = user.badges.filter((b) => b.set === 'premium')
+        user.subMonths = 0
+        user.subTier = 0
+        recordBadgeState(ctx, user, null)
+      }
       ctx.lastScriptUser = user
       if (!e.user && Object.keys(e.flags).length) applyFlags(ctx, user, e.flags)
       let text = fill(ctx, e.text)
@@ -693,8 +772,11 @@ function applyScriptEntry(ctx: Ctx, e: ScriptEntry, t: number, out: ChatMessage[
       const total = e.count + rng.int(0, 200)
       push(communityGiftNotice(ctx, t, gifter, e.count, e.tier, total))
       let tt = t + (even ? 1 : 250)
+      const got = new Set<Chatter>([gifter])
       for (let i = 0; i < Math.min(e.count, 25); i++) {
-        const recipient = pickChatter(ctx, gifter)
+        let recipient = pickChatter(ctx, gifter)
+        for (let k = 0; k < 6 && got.has(recipient); k++) recipient = pickChatter(ctx, gifter)
+        got.add(recipient)
         push(giftNotice(ctx, tt, gifter, recipient, e.tier))
         tt += even ? 1 : rng.int(60, 220)
       }
@@ -723,6 +805,8 @@ function applyScriptEntry(ctx: Ctx, e: ScriptEntry, t: number, out: ChatMessage[
       if (!e.user) break // "!timeout" without a user would delete a random chatter's lines
       const user = resolveUser(ctx, e.user)
       for (const m of out) if (m.user === user && !m.notice && m.t <= t && !m.deletedAt) m.deletedAt = t
+      // filler chat is generated afterwards: remember the ban so those messages obey it as well
+      ctx.bans.push({ user, t, untilMs: t + Math.max(1, e.seconds) * 1000 })
       break
     }
     case 'system': {
@@ -767,6 +851,7 @@ function applyScriptEntry(ctx: Ctx, e: ScriptEntry, t: number, out: ChatMessage[
       const u = resolveUser(ctx, e.user)
       if (e.unmod) {
         u.isMod = false
+        u.badges = u.badges.filter((b) => b.set !== 'moderator')
         applyFlags(ctx, u, {})
       } else applyFlags(ctx, u, e.flags)
       break
@@ -1102,10 +1187,10 @@ function evenOut(messages: ChatMessage[], gap: number, speedChanges: { t: number
     for (let i = 1; i < after.length; i++) {
       const orig = after[i].t
       const origGap = orig - prevOrig
-      // "!speed" still applies to the metronome
-      const step = gap / speedAt(speedChanges, prevNew)
+      // "!speed" still applies to the metronome (rate changes are stamped in original time)
+      const step = gap / speedAt(speedChanges, prevOrig)
       // explicit pauses (!wait, +N) are kept exactly; other far-apart timings (@N) at least keep their distance
-      const wanted = Math.max(step, after[i].minGapBefore ?? 0, origGap > step * 2.5 && !after[i].minGapBefore ? origGap : 0)
+      const wanted = Math.max(step, after[i].minGapBefore ?? 0, origGap > gap * 2.5 && !after[i].minGapBefore ? origGap : 0)
       const newT = prevNew + wanted
       prevOrig = orig
       shift(after[i], newT)

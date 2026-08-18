@@ -64,7 +64,6 @@ export async function exportProRes(a: CommonExportArgs): Promise<ExportResult> {
   signal.addEventListener('abort', onAbort, { once: true })
   const packetSource = new EncodedVideoPacketSource('prores')
   output.addVideoTrack(packetSource, { frameRate: fps, maximumPacketCount: Math.ceil(total * 1.34) + 16 })
-  await output.start()
 
   // chunk size scales with resolution to keep wasm memory modest (~≤120 MB of raw RGBA per chunk)
   const pixels = source.geometry.outW * source.geometry.outH
@@ -78,6 +77,7 @@ export async function exportProRes(a: CommonExportArgs): Promise<ExportResult> {
   }
   ff.on('log', onLog)
   try {
+    await output.start()
     for (let start = 0; start < total; start += chunkFrames) {
       if (signal.aborted) throw new DOMException('cancelled', 'AbortError')
       const end = Math.min(total, start + chunkFrames)
@@ -134,7 +134,9 @@ export async function exportProRes(a: CommonExportArgs): Promise<ExportResult> {
     const buf = (target as BufferTarget).buffer!
     const blob = new Blob([buf], { type: mime })
     return { blob, filename, mime, savedToDisk: false, bytes: blob.size }
-  } catch (e) {
+  } catch (err) {
+    // terminate() rejects the in-flight ffmpeg call with its own Error: report the cancel as a cancel
+    const e = signal.aborted ? new DOMException('cancelled', 'AbortError') : err
     if (guarded) guarded.guard.ok = false // discard the partial file instead of committing it
     try {
       await output.cancel()

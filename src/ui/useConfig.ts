@@ -37,13 +37,16 @@ export function sanitize(p: Partial<Config> | null | undefined): Partial<Config>
   const out: Partial<Config> = {}
   if (!p) return out
   for (const k of Object.keys(DEFAULT_CONFIG) as (keyof Config)[]) {
-    if (k in p && typeof p[k] === typeof DEFAULT_CONFIG[k]) (out as Record<string, unknown>)[k] = p[k]
+    if (!(k in p)) continue
+    const d = DEFAULT_CONFIG[k]
+    const v = p[k]
+    const ok = Array.isArray(d) ? Array.isArray(v) : typeof v === typeof d && v !== null && (typeof d !== 'number' || Number.isFinite(v as number))
+    if (ok) (out as Record<string, unknown>)[k] = v
   }
   return out
 }
 
 // Uploaded images (data URLs, easily several MB) live in IndexedDB; everything else in localStorage.
-const IMAGE_KEYS = ['customBadges', 'customEmotes'] as const
 const IDB_NAME = 'twitchsim'
 const IDB_STORE = 'kv'
 
@@ -95,10 +98,15 @@ export function useConfig() {
       const hash = location.hash.startsWith('#c=') ? location.hash.slice(3) : ''
       if (hash) {
         const p = decodeShare(hash)
+        // the link has been applied (or declined); drop it so later edits (saved to localStorage) win on reload
+        history.replaceState(null, '', location.pathname + location.search)
         if (p) {
-          // the link has been applied; drop it so later edits (saved to localStorage) win on reload
-          history.replaceState(null, '', location.pathname + location.search)
-          return { ...base, ...sanitize(p) }
+          const existing = localStorage.getItem(STORAGE_KEY)
+          const apply = !existing || confirm('Open the shared TwitchSim settings? Your current settings will be replaced (a backup is kept until you change something).')
+          if (apply) {
+            if (existing) localStorage.setItem(STORAGE_KEY + '.backup', existing)
+            return { ...base, ...sanitize(p) }
+          }
         }
       }
       const raw = localStorage.getItem(STORAGE_KEY)
@@ -108,37 +116,54 @@ export function useConfig() {
     }
     return base
   })
-  // uploaded images come back asynchronously from IndexedDB
+  // uploaded images come back asynchronously from IndexedDB; until then nothing is written back
+  const imagesRestored = useRef(false)
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       const imgs = await idbGet<Partial<Pick<Config, 'customBadges' | 'customEmotes'>>>('images')
-      if (cancelled || !imgs) return
-      const p = sanitize(imgs)
-      if (Object.keys(p).length) setCfg((c) => ({ ...c, ...p }))
+      if (cancelled) return
+      const p = sanitize(imgs ?? {})
+      // don't clobber uploads the user made in the meantime
+      if (Object.keys(p).length) setCfg((c) => ({ ...c, ...Object.fromEntries(Object.entries(p).filter(([k]) => (c[k as keyof Config] as unknown[]).length === 0)) }))
+      imagesRestored.current = true
     })()
     return () => {
       cancelled = true
     }
   }, [])
   const saveTimer = useRef<number | null>(null)
-  const lastImages = useRef<string>('')
+  const lastBadges = useRef<Config['customBadges'] | null>(null)
+  const lastEmotes = useRef<Config['customEmotes'] | null>(null)
+  const cfgRef = useRef(cfg)
+  cfgRef.current = cfg
+  const flush = useCallback(() => {
+    const c = cfgRef.current
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(withoutImages(c)))
+    } catch (e) {
+      console.warn('TwitchSim: could not save settings', e)
+    }
+    // images: written when the arrays change identity (every edit replaces them), once the restore is done
+    if (imagesRestored.current && (c.customBadges !== lastBadges.current || c.customEmotes !== lastEmotes.current)) {
+      lastBadges.current = c.customBadges
+      lastEmotes.current = c.customEmotes
+      void idbSet('images', { customBadges: c.customBadges, customEmotes: c.customEmotes })
+    }
+  }, [])
   useEffect(() => {
     if (saveTimer.current) window.clearTimeout(saveTimer.current)
-    saveTimer.current = window.setTimeout(() => {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(withoutImages(cfg)))
-      } catch (e) {
-        console.warn('TwitchSim: could not save settings', e)
-      }
-      // images only when they changed (cheap identity check on ids/names)
-      const sig = IMAGE_KEYS.map((k) => (cfg[k] as { id: string; name: string }[]).map((x) => x.id + x.name).join(',')).join('|') + `|${cfg.badgeFit}`
-      if (sig !== lastImages.current) {
-        lastImages.current = sig
-        void idbSet('images', { customBadges: cfg.customBadges, customEmotes: cfg.customEmotes })
-      }
-    }, 300)
-  }, [cfg])
+    saveTimer.current = window.setTimeout(flush, 300)
+  }, [cfg, flush])
+  // don't lose the last edit when the tab closes inside the debounce window
+  useEffect(() => {
+    const onHide = () => {
+      if (saveTimer.current) window.clearTimeout(saveTimer.current)
+      flush()
+    }
+    window.addEventListener('pagehide', onHide)
+    return () => window.removeEventListener('pagehide', onHide)
+  }, [flush])
   const patch = useCallback((p: Partial<Config>) => setCfg((c) => ({ ...c, ...p })), [])
   const set = useCallback(<K extends keyof Config>(k: K, v: Config[K]) => setCfg((c) => (c[k] === v ? c : { ...c, [k]: v })), [])
   const reset = useCallback(() => setCfg({ ...DEFAULT_CONFIG }), [])

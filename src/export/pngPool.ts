@@ -3,6 +3,10 @@ import { encodePng } from './png'
 interface Pending {
   resolve: (u: Uint8Array) => void
   reject: (e: Error) => void
+  /** the frame's pixels (kept until the worker answers, so a broken worker can be rescued on the main thread) */
+  data: Uint8ClampedArray
+  w: number
+  h: number
 }
 
 /** Encodes canvas frames to PNG in a small pool of Web Workers (falls back to the main thread). */
@@ -38,16 +42,18 @@ export class PngEncoderPool {
           this.workers = []
           this.busy = []
           this.inflight = 0
-          const queuedIds = new Set(queued.map((q) => q.id))
-          for (const [id, p] of this.pending) {
-            // frames already posted to a worker had their pixels transferred away: those fail
-            if (!queuedIds.has(id)) p.reject(new Error('PNG worker failed'))
-          }
-          for (const q of queued) {
-            const p = this.pending.get(q.id)
-            if (p) p.resolve(encodePng(q.data, q.w, q.h, this.level as 6))
-          }
+          // every outstanding frame (posted or queued) is re-encoded here — the pool posts a copy, so
+          // the original pixels are still intact
+          void queued
+          const all = [...this.pending.entries()].sort((a, b) => a[0] - b[0])
           this.pending.clear()
+          for (const [, p] of all) {
+            try {
+              p.resolve(encodePng(p.data, p.w, p.h, this.level as 6))
+            } catch (e) {
+              p.reject(e as Error)
+            }
+          }
         }
         this.workers.push(w)
         this.busy.push(false)
@@ -82,7 +88,7 @@ export class PngEncoderPool {
     }
     return new Promise<Uint8Array>((resolve, reject) => {
       const id = this.nextId++
-      this.pending.set(id, { resolve, reject })
+      this.pending.set(id, { resolve, reject, data: img.data, w: canvas.width, h: canvas.height })
       this.queue.push({ id, data: img.data, w: canvas.width, h: canvas.height })
       this.pump()
     })

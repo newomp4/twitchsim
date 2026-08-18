@@ -34,6 +34,8 @@ export async function exportPngZip(a: CommonExportArgs): Promise<ExportResult> {
   const flushOne = async () => {
     const job = inflight.shift()!
     const data = await job.p
+    // fflate's Zip has no ZIP64: past 4 GB the central directory offsets wrap and the archive is corrupt
+    if (bytes + data.length + 65536 > 0xffffffff) throw new Error('This PNG sequence would exceed 4 GB (the zip format limit here). Shorten the clip, lower the scale, or export WebM / ProRes instead.')
     const f = new ZipPassThrough(`frame_${String(job.i).padStart(pad, '0')}.png`)
     zip.add(f)
     f.push(data, true)
