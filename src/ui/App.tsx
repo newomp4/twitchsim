@@ -45,8 +45,8 @@ export default function App() {
     ensureFonts().then(() => setFontsReady(true))
     // small debugging surface (used by tests / power users in the console)
     const g = window as unknown as { __twitchsim?: Record<string, unknown> }
-    g.__twitchsim = { ...(g.__twitchsim ?? {}), patch, assets, callHost, evalScript, ensureHost }
-  }, [patch])
+    g.__twitchsim = { ...(g.__twitchsim ?? {}), patch, reset, assets, callHost, evalScript, ensureHost }
+  }, [patch, reset])
   const firstAnimRef = useRef(true)
   useEffect(() => {
     assets.animated = cfg.animatedEmotes
