@@ -16,6 +16,8 @@ Everything runs in the browser. Nothing is uploaded anywhere.
   reproduces Twitch's CIELAB brightening (Blue → `#8b58ff`, FireBrick → `#db4a3f`, …).
 - **Real badge images** (moderator, VIP, subscriber tiers, Prime, Turbo, bits, gifter, hype train, predictions, TwitchCon/Recap/SUBtember…)
   in Twitch's badge order, plus generated per-channel sub badge sets or the sub badges of a real channel.
+- **Your own icons**: upload images as subscriber tiers, as replacements for any Twitch badge (mod/VIP/Prime/…), or as an extra badge a share of
+  chatters wear — they're auto-fitted to the square badge box (center-crop or fit-inside) with adjustable rounded corners. Custom emotes too (GIF/WebP stay animated).
 - **Emotes**: Twitch global emotes + popular 7TV emotes (KEKW, OMEGALUL, monkaS, catJAM…). Animated emotes are decoded
   frame-by-frame so exports are deterministic. Load any real channel's Twitch/7TV/FFZ emotes and sub badges.
 - Sub / resub / gift / gift-bomb / raid / announcement notices, replies ("Replying to @…"), deleted messages,
