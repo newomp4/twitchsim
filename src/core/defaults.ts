@@ -30,6 +30,7 @@ export const DEFAULT_CONFIG: Config = {
   streamerChats: true,
   streamerColor: '',
   messagesPerMinute: 90,
+  pacing: 'natural',
   burstiness: 0.5,
   reactionMoments: 0.5,
   startDelayMs: 0,

@@ -140,6 +140,8 @@ export interface Config {
   streamerColor: string
   // pacing
   messagesPerMinute: number
+  /** natural = human-like random gaps & bursts; even = metronomic, exactly one interval apart */
+  pacing: 'natural' | 'even'
   burstiness: number // 0..1
   reactionMoments: number // 0..1 how often the crowd reacts together
   startDelayMs: number

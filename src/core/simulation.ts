@@ -129,17 +129,25 @@ export function buildTimeline(inputs: SimInputs): Timeline {
         applyScriptEntry(ctx, e, prev, messages, clears)
         continue
       }
+      const autoGap =
+        cfg.pacing === 'even'
+          ? baseGapMs * (cfg.mode === 'script' ? 1 : Math.max(1, cfg.scriptGapMultiplier + 1))
+          : cfg.mode === 'script'
+            ? rng.exp(baseGapMs) * 0.85 + baseGapMs * 0.15
+            : baseGapMs * Math.max(1, cfg.scriptGapMultiplier)
+      if (e.type === 'wait') {
+        // "!wait N": the next line comes N seconds after the previous one
+        prev = prev + e.sec * 1000 - autoGap
+        first = false
+        continue
+      }
       let t: number
       if (e.timing.kind === 'at') t = e.timing.sec * 1000
       else if (e.timing.kind === 'after') t = prev + e.timing.sec * 1000
       else if (first) t = cursor
-      else t = prev + (cfg.mode === 'script' ? rng.exp(baseGapMs) * 0.85 + baseGapMs * 0.15 : baseGapMs * Math.max(1, cfg.scriptGapMultiplier))
+      else t = prev + autoGap
       t = Math.max(0, t)
       first = false
-      if (e.type === 'wait') {
-        prev = t + e.sec * 1000
-        continue
-      }
       if (e.type === 'speed') {
         speedChanges.push({ t, mult: e.mult })
         prev = t
@@ -147,6 +155,8 @@ export function buildTimeline(inputs: SimInputs): Timeline {
       }
       const produced = applyScriptEntry(ctx, e, t, messages, clears)
       prev = t
+      // in metronomic mode multi-message events (bursts, gift bombs, raids) occupy consecutive slots
+      if (cfg.pacing === 'even' && produced.length > 1) prev = Math.max(t, ...produced.map((m) => m.t))
       scriptEnd = Math.max(scriptEnd, t, ...produced.map((m) => m.t))
     }
   }
@@ -161,6 +171,10 @@ export function buildTimeline(inputs: SimInputs): Timeline {
 
   // ---- 4) order, ids, deletions/clears -------------------------------------
   messages.sort((a, b) => a.t - b.t || a.id - b.id)
+  if (cfg.pacing === 'even') evenOut(messages, baseGapMs)
+  if (cfg.pacing === 'even' && cfg.durationAuto && useScript && messages.length) {
+    durationMs = Math.max(3000, messages[messages.length - 1].t + cfg.tailSec * 1000)
+  }
   return { messages, durationMs, chatters: ctx.chatters, clears: clears.sort((a, b) => a - b) }
 }
 
@@ -587,6 +601,7 @@ function announcement(ctx: Ctx, t: number, color: string, text: string, user?: C
 
 function applyScriptEntry(ctx: Ctx, e: ScriptEntry, t: number, out: ChatMessage[], clears: number[]): ChatMessage[] {
   const { rng, cfg } = ctx
+  const even = cfg.pacing === 'even'
   const produced: ChatMessage[] = []
   const push = (m: ChatMessage) => {
     out.push(m)
@@ -627,11 +642,11 @@ function applyScriptEntry(ctx: Ctx, e: ScriptEntry, t: number, out: ChatMessage[
       const gifter = resolveUser(ctx, e.gifter)
       const total = e.count + rng.int(0, 200)
       push(communityGiftNotice(ctx, t, gifter, e.count, e.tier, total))
-      let tt = t + 250
+      let tt = t + (even ? 1 : 250)
       for (let i = 0; i < Math.min(e.count, 25); i++) {
         const recipient = pickChatter(ctx, gifter)
         push(giftNotice(ctx, tt, gifter, recipient, e.tier))
-        tt += rng.int(60, 220)
+        tt += even ? 1 : rng.int(60, 220)
       }
       if (cfg.mode !== 'script') spawnReaction(ctx, t + 800, 'gifted', out, gifter)
       break
@@ -639,7 +654,7 @@ function applyScriptEntry(ctx: Ctx, e: ScriptEntry, t: number, out: ChatMessage[
     case 'raid': {
       const raider = resolveUser(ctx, e.raider)
       push(raidNotice(ctx, t, raider, e.count))
-      spawnRaid(ctx, t, e.count, out, raider, cfg.mode !== 'script')
+      produced.push(...spawnRaid(ctx, t, e.count, out, raider, cfg.mode !== 'script'))
       break
     }
     case 'announce':
@@ -693,7 +708,7 @@ function applyScriptEntry(ctx: Ctx, e: ScriptEntry, t: number, out: ChatMessage[
         const u = pickChatter(ctx)
         const text = /\{/.test(e.text) ? fill(ctx, e.text) : spam
         push(makeMessage(ctx, tt, u, u.persona === 'spammer' && rng.chance(0.4) ? `${text} ${text}` : text))
-        tt += rng.exp(2200 / n)
+        tt += even ? 1 : rng.exp(2200 / n)
       }
       break
     }
@@ -751,13 +766,14 @@ function generateAmbient(ctx: Ctx, durationMs: number, speedChanges: { t: number
   const mpm = Math.max(0.5, cfg.messagesPerMinute)
   const baseRate = mpm / 60000 // per ms
   const hype = cfg.mode === 'hype'
+  const even = cfg.pacing === 'even'
   // burst envelope: piecewise multipliers
   const bursts: { t0: number; t1: number; mult: number }[] = []
   {
     let t = t0
     while (t < durationMs) {
       const len = rng.float(2500, 14000)
-      const sd = cfg.burstiness * 0.9
+      const sd = even ? 0 : cfg.burstiness * 0.9
       const mult = Math.exp(rng.gauss(-sd * sd * 0.5, sd))
       bursts.push({ t0: t, t1: t + len, mult })
       t += len
@@ -775,10 +791,16 @@ function generateAmbient(ctx: Ctx, durationMs: number, speedChanges: { t: number
   const raidWindows: { t0: number; t1: number; users: Chatter[] }[] = []
   ctx.raidWindows = raidWindows
   while (t < durationMs) {
-    t += rng.exp(1 / maxRate)
-    if (t >= durationMs) break
-    const rate = baseRate * burstAt(t) * speedAt(speedChanges, t)
-    if (rng.next() > rate / maxRate) continue
+    if (even) {
+      // metronomic: one message per interval (speed changes still apply)
+      t += 60000 / (mpm * speedAt(speedChanges, t))
+      if (t >= durationMs) break
+    } else {
+      t += rng.exp(1 / maxRate)
+      if (t >= durationMs) break
+      const rate = baseRate * burstAt(t) * speedAt(speedChanges, t)
+      if (rng.next() > rate / maxRate) continue
+    }
     const m = ambientMessage(ctx, t, lastUser)
     if (m) {
       out.push(m)
@@ -804,7 +826,7 @@ function generateAmbient(ctx: Ctx, durationMs: number, speedChanges: { t: number
   }
   // 2) reaction moments
   {
-    const perMin = hype ? 7 : cfg.reactionMoments * 4
+    const perMin = even ? 0 : hype ? 7 : cfg.reactionMoments * 4
     let mt = t0 + rng.exp(60000 / Math.max(0.01, perMin))
     while (perMin > 0 && mt < durationMs) {
       spawnMoment(ctx, mt, out, mpm * burstAt(mt) * speedAt(speedChanges, mt))
@@ -971,21 +993,58 @@ function spawnReaction(ctx: Ctx, t: number, kind: 'sub' | 'gifted' | 'raid', out
   }
 }
 
-function spawnRaid(ctx: Ctx, t: number, count: number, out: ChatMessage[], raidingStreamer?: Chatter, withReactions = true): void {
+function spawnRaid(ctx: Ctx, t: number, count: number, out: ChatMessage[], raidingStreamer?: Chatter, withReactions = true): ChatMessage[] {
   const { rng } = ctx
+  const created: ChatMessage[] = []
   const raiders: Chatter[] = []
   const n = Math.min(60, Math.max(4, Math.round(Math.sqrt(count) * 1.5)))
   // raiders come from another channel: no sub/bits badges here (maybe Prime / global badges)
   for (let i = 0; i < n; i++) raiders.push(freshChatter(ctx, rng.chance(0.4) ? 'emoter' : 'normal', true))
   const raidMsg = fill(ctx, rng.pick(['{e:hype} RAID {e:hype}', 'twitchRaid twitchRaid twitchRaid', '{e:hype} {e:hype} {e:hype}', 'RAID RAID RAID', '{e:love} RAID {e:love}', 'we are here {e:hype}', 'RAIDERS HERE', 'hello from the raid {e:wave}', 'RAID', 'twitchRaid', 'twitchRaid RAID twitchRaid', '{e:jam} RAID {e:jam}']))
-  let tt = t + 300
+  const even = ctx.cfg.pacing === 'even'
+  let tt = t + (even ? 1 : 300)
   for (const r of raiders) {
     const text = rng.chance(0.6) ? raidMsg : fill(ctx, rng.pick(['hi {e:wave}', 'raid {e:hype}', 'hello!', 'RAID', 'we come in peace', 'nice stream', 'what game is this', 'hi chat', 'RAIDDD', 'raiders {e:hype}', 'raid time', 'we made it', 'hello new streamer', 'twitchRaid', 'RAID {e:hype}', 'ayo raid', 'first time here from the raid', 'this stream looks cool', 'greetings {e:wave}', 'raid squad', 'RAAAID']))
-    out.push(makeMessage(ctx, tt, r, text, { special: rng.chance(0.5) ? { label: 'Raider', icon: 'raider' } : undefined }))
-    tt += rng.exp(4500 / n)
+    const m = makeMessage(ctx, tt, r, text, { special: rng.chance(0.5) ? { label: 'Raider', icon: 'raider' } : undefined })
+    out.push(m)
+    created.push(m)
+    tt += even ? 1 : rng.exp(4500 / n)
   }
   ;(ctx.raidWindows ??= []).push({ t0: t, t1: t + 90000, users: raiders })
   if (withReactions) spawnReaction(ctx, t + 1500, 'raid', out, raidingStreamer)
+  return created
+}
+
+/**
+ * Metronomic pacing: re-times messages so consecutive ones are exactly `gap` apart (in order),
+ * keeping deliberate pauses (gaps much longer than the interval, e.g. !wait) and the pre-fill region.
+ */
+function evenOut(messages: ChatMessage[], gap: number): void {
+  if (!messages.length) return
+  const shift = (m: ChatMessage, newT: number) => {
+    const d = newT - m.t
+    if (m.deletedAt !== undefined) m.deletedAt += d
+    m.t = newT
+  }
+  const before = messages.filter((m) => m.t < 0)
+  const after = messages.filter((m) => m.t >= 0)
+  // pre-fill: walk backwards from 0
+  for (let i = before.length - 1, k = 1; i >= 0; i--, k++) shift(before[i], -k * gap)
+  if (after.length) {
+    let prevOrig = after[0].t
+    let prevNew = after[0].t
+    for (let i = 1; i < after.length; i++) {
+      const orig = after[i].t
+      const origGap = orig - prevOrig
+      // preserve intentional long pauses (waits, explicit far-apart timings)
+      const extra = origGap > gap * 2.5 ? origGap - gap : 0
+      const newT = prevNew + gap + extra
+      prevOrig = orig
+      shift(after[i], newT)
+      prevNew = newT
+    }
+  }
+  messages.sort((a, b) => a.t - b.t || a.id - b.id)
 }
 
 export function timelineStats(tl: Timeline): { messages: number; chatters: number; notices: number } {

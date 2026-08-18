@@ -104,7 +104,26 @@ export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Con
       </Section>
 
       <Section title="Speed & length">
-        <Slider label="Chat speed" value={cfg.messagesPerMinute} min={1} max={1500} step={1} onChange={(v) => set('messagesPerMinute', v)} format={(v) => `${v} msg/min`} hint="10–30 = small stream · 100–300 = mid-size · 500+ = huge (unreadable, like real big chats)" />
+        <Field label="Pacing">
+          <Segmented
+            value={cfg.pacing}
+            onChange={(v) => set('pacing', v)}
+            options={[
+              { value: 'natural', label: 'Natural (human-like)', title: 'Random gaps, bursts and lulls, crowd reactions — like real chat' },
+              { value: 'even', label: 'Regular intervals', title: 'Metronomic: every message lands exactly one interval apart' },
+            ]}
+          />
+        </Field>
+        <Slider
+          label={cfg.pacing === 'even' ? 'Interval' : 'Chat speed'}
+          value={cfg.messagesPerMinute}
+          min={1}
+          max={1500}
+          step={1}
+          onChange={(v) => set('messagesPerMinute', v)}
+          format={(v) => (cfg.pacing === 'even' ? `one message every ${(60 / v).toFixed(2)} s (${v}/min)` : `${v} msg/min`)}
+          hint={cfg.pacing === 'even' ? 'Perfectly regular. !wait pauses in your lines are still honored; bursts and crowd reactions are off.' : '10–30 = small stream · 100–300 = mid-size · 500+ = huge (unreadable, like real big chats)'}
+        />
         <Row>
           <Toggle label="Start with the chat already full" value={cfg.prefillSec > 0} onChange={(v) => set('prefillSec', v ? 20 : 0)} />
           <Toggle label="Loop-friendly: end right after my last line" value={cfg.durationAuto} onChange={(v) => set('durationAuto', v)} />
@@ -144,10 +163,12 @@ export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Con
           <Slider label="Users with a custom name color" value={cfg.customColorRatio} min={0} max={1} step={0.01} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set('customColorRatio', v)} />
           <Slider label="Localized names (김민수 (minsu_kim))" value={cfg.localizedNamesRatio} min={0} max={0.3} step={0.01} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set('localizedNamesRatio', v)} />
         </Row>
-        <Row>
-          <Slider label="Burstiness" value={cfg.burstiness} min={0} max={1} step={0.01} onChange={(v) => set('burstiness', v)} format={lvl} />
-          <Slider label="Crowd reactions (KEKW walls, W spam)" value={cfg.reactionMoments} min={0} max={1} step={0.01} onChange={(v) => set('reactionMoments', v)} format={lvl} />
-        </Row>
+        {cfg.pacing === 'natural' && (
+          <Row>
+            <Slider label="Burstiness" value={cfg.burstiness} min={0} max={1} step={0.01} onChange={(v) => set('burstiness', v)} format={lvl} />
+            <Slider label="Crowd reactions (KEKW walls, W spam)" value={cfg.reactionMoments} min={0} max={1} step={0.01} onChange={(v) => set('reactionMoments', v)} format={lvl} />
+          </Row>
+        )}
         <Row>
           <NumberInput label="Start delay (ms)" value={cfg.startDelayMs} min={0} max={60000} step={100} onChange={(v) => set('startDelayMs', v)} />
           <NumberInput label="Pre-fill seconds" value={cfg.prefillSec} min={0} max={600} step={1} onChange={(v) => set('prefillSec', v)} />
