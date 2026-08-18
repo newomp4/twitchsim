@@ -92,6 +92,39 @@ Let an AI write it: copy [docs/AI_PROMPT.md](docs/AI_PROMPT.md) (also under **He
 The lines box also accepts a JSON file with users + messages + typed events — schema in [docs/AI_PROMPT.md](docs/AI_PROMPT.md).
 </details>
 
+## After Effects panel
+
+TwitchSim also runs **inside After Effects** as a panel (Window ▸ Extensions ▸ TwitchSim) and, instead of a video, builds the chat
+out of real AE layers — so you can parent things to individual messages, restyle, retime and render with native alpha.
+
+```bash
+npm install
+npm run cep:install     # builds the panel and installs it into Adobe's CEP extensions folder (macOS / Windows)
+# npm run cep:link      # same, but symlinks the repo's cep/ folder (rebuild → reopen the panel to see changes)
+```
+
+Then (re)start After Effects (2022 or newer) → **Window ▸ Extensions ▸ TwitchSim**. The panel is the normal TwitchSim UI (same
+Chat / Style tabs, live preview) plus an **After Effects** tab with **Build in After Effects**.
+
+What gets built:
+
+| Layer | What it is |
+|---|---|
+| `TwitchSim Anchor` (null) | move / scale the whole chat |
+| `Background` (shape) | the panel color, only when the style isn't transparent |
+| `Scroll` (null) | **the only animated thing** — every push-up of the stack is a keyframe on its Y position (retime it, ease it, time-remap the comp…) |
+| `msg 012 · username` (precomp, one per message) | parent anything to it and it rides along; open it to restyle a single message: badges/emotes are footage layers, name & text are text layers (Inter), notice boxes / highlight pills are shape layers |
+| `Top fade matte` (optional) | luma matte for the "fade at the top edge" style setting |
+
+Building again with the **same comp name updates the comp in place** (it stays valid wherever you already used it, and your own layers inside
+it are kept and re-parented to the message with the same name). Text edits, chat width, font size and new lines need a rebuild — the panel
+re-flows the layout, exactly like the preview. Badge & emote PNGs are written next to your project (`<project>/TwitchSim/<comp>/`), or in
+`~/Documents/TwitchSim` while the project is unsaved.
+
+Under the hood: `src/ae/scene.ts` compiles the timeline into a JSON scene (layers, keyframes with exact ease-out tangents, image files);
+`cep/host/index.jsx` (ExtendScript) turns it into comps. The panel itself is the web app built as one classic bundle for CEP's Chromium 99
+(`npm run build:cep`), no signing needed because the installer switches on CEP's PlayerDebugMode.
+
 ## Which export should I use?
 
 | Format | Alpha | Opens in | Notes |
@@ -109,6 +142,7 @@ Tip: turn on **Stream to disk** for long or 4K exports so nothing has to fit in 
 - `src/core/simulation.ts` builds a deterministic timeline of messages from the config + seed (chatter pool, ambient generator, script DSL, events).
 - `src/core/layout.ts` + `renderer.ts` lay the messages out with Twitch's exact CSS metrics and draw them on a canvas at any scale.
 - `src/export/*` steps through frames and encodes them with WebCodecs (via [mediabunny](https://mediabunny.dev)), FFmpeg.wasm (ProRes 4444) or a PNG worker pool.
+- `src/ae/*` + `cep/` turn the same layout into After Effects comps/layers/keyframes when the app runs as a CEP panel.
 - Live values (fonts, colors, spacing, notice markup, readable-color samples) were captured from twitch.tv's DOM in August 2026.
 
 ## Disclaimer

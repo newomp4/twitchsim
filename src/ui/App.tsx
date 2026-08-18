@@ -5,6 +5,8 @@ import { ChatPanel } from './panels/ChatPanel'
 import { StylePanel } from './panels/StylePanel'
 import { ExportPanel } from './panels/ExportPanel'
 import { HelpPanel } from './panels/HelpPanel'
+import { AEPanel } from './panels/AEPanel'
+import { isCEP, writeText, callHost, evalScript, ensureHost } from '../ae/cep'
 import { AssetCache } from '../core/assets'
 import { EmoteRegistry, TWITCH_GLOBAL_EMOTES, SEVENTV_EMOTES, customEmoteDefs } from '../core/emotes'
 import { buildTimeline } from '../core/simulation'
@@ -18,7 +20,8 @@ import { makeFrameSource } from '../export/exporter'
 import { collectAssetUrls } from '../core/renderer'
 import { styleFromConfig } from '../core/layout'
 
-const TABS = ['Chat', 'Style', 'Export', 'Help'] as const
+const IN_AE = isCEP()
+const TABS = (IN_AE ? ['Chat', 'Style', 'After Effects', 'Help'] : ['Chat', 'Style', 'Export', 'Help']) as readonly ('Chat' | 'Style' | 'Export' | 'After Effects' | 'Help')[]
 type Tab = (typeof TABS)[number]
 
 const assets = new AssetCache()
@@ -35,7 +38,7 @@ export default function App() {
     ensureFonts().then(() => setFontsReady(true))
     // small debugging surface (used by tests / power users in the console)
     const g = window as unknown as { __twitchsim?: Record<string, unknown> }
-    g.__twitchsim = { ...(g.__twitchsim ?? {}), patch, assets }
+    g.__twitchsim = { ...(g.__twitchsim ?? {}), patch, assets, callHost, evalScript, ensureHost }
   }, [patch])
   useEffect(() => {
     assets.animated = cfg.animatedEmotes
@@ -112,6 +115,12 @@ export default function App() {
     )
   }
   const savePreset = () => {
+    if (IN_AE) {
+      // no downloads inside a CEP panel: use a native save dialog instead
+      const r = (window.cep!.fs as unknown as { showSaveDialogEx: (title: string, initialPath: string, fileTypes: string[], defaultName: string) => { err: number; data: string } }).showSaveDialogEx('Save TwitchSim preset', '', ['json'], `twitchsim-${cfg.seed}.json`)
+      if (r.err === 0 && r.data) writeText(r.data, JSON.stringify(cfg, null, 2))
+      return
+    }
     const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
@@ -142,7 +151,7 @@ export default function App() {
           <span className="logo" aria-hidden>
             <svg width="20" height="20" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#9147ff" /><path d="M9 7h15v11l-5 5h-4l-3 3v-3H9z" fill="#fff" /><rect x="15" y="11" width="2" height="5" fill="#9147ff" /><rect x="19" y="11" width="2" height="5" fill="#9147ff" /></svg>
           </span>
-          TwitchSim <span className="sub">fake Twitch chat → transparent video</span>
+          TwitchSim <span className="sub">{IN_AE ? 'fake Twitch chat → After Effects layers' : 'fake Twitch chat → transparent video'}</span>
         </div>
         <div className="topbtns">
           <select value={String(zoom)} onChange={(e) => setZoom(e.target.value === 'fit' || e.target.value === 'auto' ? (e.target.value as 'fit' | 'auto') : parseFloat(e.target.value))} title="Preview zoom">
@@ -153,11 +162,15 @@ export default function App() {
             <option value="1.5">150%</option>
             <option value="2">200%</option>
           </select>
-          <button type="button" className="btn small" onClick={share}>Share link</button>
+          {!IN_AE && <button type="button" className="btn small" onClick={share}>Share link</button>}
           <button type="button" className="btn small" onClick={savePreset}>Save preset</button>
           <button type="button" className="btn small" onClick={loadPreset}>Load preset</button>
           <button type="button" className="btn small" onClick={() => { if (confirm('Reset all settings to defaults?')) reset() }}>Reset</button>
-          <a className="btn small" href="https://github.com/newomp4/twitchsim" target="_blank" rel="noreferrer">GitHub</a>
+          {IN_AE ? (
+            <button type="button" className="btn small" onClick={() => window.cep?.util.openURLInDefaultBrowser('https://github.com/newomp4/twitchsim')}>GitHub</button>
+          ) : (
+            <a className="btn small" href="https://github.com/newomp4/twitchsim" target="_blank" rel="noreferrer">GitHub</a>
+          )}
         </div>
       </header>
       <main className="main">
@@ -177,6 +190,7 @@ export default function App() {
             {tab === 'Chat' && <ChatPanel cfg={cfg} set={set} />}
             {tab === 'Style' && <StylePanel cfg={cfg} set={set} patch={patch} channel={channel} setChannel={setChannel} />}
             {tab === 'Export' && <ExportPanel cfg={cfg} set={set} patch={patch} timeline={timeline} assets={assets} />}
+            {tab === 'After Effects' && <AEPanel cfg={cfg} set={set} patch={patch} timeline={timeline} assets={assets} />}
             {tab === 'Help' && <HelpPanel />}
           </div>
         </aside>

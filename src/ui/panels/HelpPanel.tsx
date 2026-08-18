@@ -98,6 +98,13 @@ xX_shadow_Xx: no way`}</pre>
         </ul>
       </Section>
 
+      <Section title="After Effects panel">
+        <p className="hint">
+          TwitchSim also runs <b>inside After Effects</b> (Window ▸ Extensions ▸ TwitchSim) and builds the chat as real AE layers — one precomp per message you can parent things to, text & shape layers, badge/emote footage and a single keyframed "Scroll" null.
+          Install: clone the repo, <code>npm install</code>, <code>npm run cep:install</code>, restart AE. Details in the README.
+        </p>
+      </Section>
+
       <Section title="How realistic is it?">
         <ul className="help-list">
           <li>Metrics measured on live twitch.tv (2026): Inter 14px / 22px lines, 4px 16px padding, 340px column, 18px badges, 28px emote boxes, the four font-size settings.</li>

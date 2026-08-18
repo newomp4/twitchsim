@@ -10,7 +10,10 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "build:pages": "GITHUB_PAGES=1 vite build",
-    "deploy": "npm run build:pages && gh-pages -d dist -m \"Deploy to GitHub Pages\""
+    "deploy": "npm run build:pages && gh-pages -d dist -m \"Deploy to GitHub Pages\"",
+    "build:cep": "TWITCHSIM_CEP=1 vite build",
+    "cep:install": "npm run build:cep && node scripts/install-cep.mjs",
+    "cep:link": "npm run build:cep && node scripts/install-cep.mjs --link"
   },
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.15",
