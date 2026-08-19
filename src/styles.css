@@ -228,3 +228,22 @@ textarea.ta.small { min-height: 70px; }
 ol.steps { margin: 2px 0 8px; padding-left: 18px; font-size: 12.5px; color: var(--muted); line-height: 1.55; }
 ol.steps li { margin: 2px 0; }
 ol.steps b { color: var(--text); font-weight: 600; }
+
+/* Presets dropdown */
+.presets { position: relative; display: inline-block; }
+.presets-dd { position: absolute; right: 0; top: calc(100% + 6px); z-index: 50; width: 300px; max-width: 82vw; background: var(--card); border: 1px solid var(--border2); border-radius: var(--radius); box-shadow: 0 10px 30px rgba(0,0,0,.45); padding: 10px; }
+.presets-dd .pd-hint { font-size: 12px; color: var(--muted2); line-height: 1.5; margin: 0 2px 8px; }
+.presets-dd .pd-save { display: block; width: 100%; text-align: left; padding: 8px 10px; border: 1px solid var(--border2); border-radius: var(--radius-sm); background: var(--card2); color: var(--text); font-size: 13px; cursor: pointer; }
+.presets-dd .pd-save:hover { border-color: var(--muted); }
+.presets-dd .pd-list { margin: 8px 0; max-height: 240px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
+.presets-dd .pd-item { display: flex; align-items: stretch; gap: 3px; }
+.presets-dd .pd-load { flex: 1; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text); font-size: 13px; cursor: pointer; text-align: left; }
+.presets-dd .pd-load:hover { background: var(--card2); border-color: var(--border2); }
+.presets-dd .pd-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.presets-dd .pd-when { flex: none; font-size: 11px; color: var(--muted2); }
+.presets-dd .pd-mini { flex: none; width: 26px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--muted2); cursor: pointer; font-size: 13px; }
+.presets-dd .pd-mini:hover { background: var(--card2); border-color: var(--border2); color: var(--text); }
+.presets-dd .pd-empty { font-size: 12px; color: var(--muted2); text-align: center; padding: 12px 6px; margin: 6px 0; }
+.presets-dd .pd-div { height: 1px; background: var(--border2); margin: 8px 0; }
+.presets-dd .pd-file { display: block; width: 100%; text-align: left; padding: 7px 9px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted); font-size: 12.5px; cursor: pointer; }
+.presets-dd .pd-file:hover { background: var(--card2); color: var(--text); }

@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useConfig, useSimConfig, encodeShare, sanitize } from './useConfig'
+import { useConfig, useSimConfig, encodeShare } from './useConfig'
 import { Preview, Transport, usePlayer } from './Preview'
 import { copyText } from './controls'
+import { PresetsMenu } from './PresetsMenu'
 import { ChatPanel } from './panels/ChatPanel'
 import { StylePanel } from './panels/StylePanel'
 import { ExportPanel } from './panels/ExportPanel'
 import { HelpPanel } from './panels/HelpPanel'
 import { AEPanel } from './panels/AEPanel'
-import { isCEP, writeText, callHost, evalScript, ensureHost } from '../ae/cep'
+import { isCEP, callHost, evalScript, ensureHost } from '../ae/cep'
 import { AssetCache } from '../core/assets'
 import { EmoteRegistry, TWITCH_GLOBAL_EMOTES, SEVENTV_EMOTES, customEmoteDefs } from '../core/emotes'
 import { buildTimeline } from '../core/simulation'
@@ -15,8 +16,6 @@ import { generateSubBadgeSet } from '../core/badges'
 import { Rng } from '../core/rng'
 import { loadChannel, type ChannelData } from '../core/channel'
 import { ensureFonts, onFontsChanged, timelineText } from '../core/fonts'
-import type { Config } from '../core/types'
-import { DEFAULT_CONFIG } from '../core/defaults'
 import { makeFrameSource } from '../export/exporter'
 import { collectAssetUrls } from '../core/renderer'
 import { styleFromConfig } from '../core/layout'
@@ -155,36 +154,6 @@ export default function App() {
     if (await copyText(url)) alert('Share link copied to clipboard')
     else prompt('Copy this link', url)
   }
-  const savePreset = () => {
-    if (IN_AE) {
-      // no downloads inside a CEP panel: use a native save dialog instead
-      const r = (window.cep!.fs as unknown as { showSaveDialogEx: (title: string, initialPath: string, fileTypes: string[], defaultName: string) => { err: number; data: string } }).showSaveDialogEx('Save TwitchSim preset', '', ['json'], `twitchsim-${cfg.seed}.json`)
-      if (r.err === 0 && r.data) writeText(r.data, JSON.stringify(cfg, null, 2))
-      return
-    }
-    const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `twitchsim-${cfg.seed}.json`
-    a.click()
-    setTimeout(() => URL.revokeObjectURL(a.href), 10000)
-  }
-  const loadPreset = () => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = '.json,application/json'
-    input.onchange = async () => {
-      const f = input.files?.[0]
-      if (!f) return
-      try {
-        const j = JSON.parse(await f.text()) as Partial<Config>
-        setCfg({ ...DEFAULT_CONFIG, ...sanitize(j) })
-      } catch {
-        alert('Invalid preset file')
-      }
-    }
-    input.click()
-  }
 
   return (
     <div className="app">
@@ -205,8 +174,7 @@ export default function App() {
             <option value="2">200%</option>
           </select>
           {!IN_AE && <button type="button" className="btn small" onClick={share}>Share link</button>}
-          <button type="button" className="btn small" onClick={savePreset}>Save preset</button>
-          <button type="button" className="btn small" onClick={loadPreset}>Load preset</button>
+          <PresetsMenu cfg={cfg} apply={(c) => setCfg(c)} />
           <button type="button" className="btn small" onClick={() => { if (confirm('Reset all settings to defaults?')) reset() }}>Reset</button>
           {IN_AE ? (
             <button type="button" className="btn small" onClick={() => window.cep?.util.openURLInDefaultBrowser('https://github.com/newomp4/twitchsim')}>GitHub</button>
