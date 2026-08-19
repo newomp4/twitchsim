@@ -105,7 +105,8 @@ $.global.TWITCHSIM = (function () {
     return inMain ? 'thisComp.layer(' + q(CTL) + ')' : 'comp(' + q(st.data.compName) + ').layer(' + q(CTL) + ')';
   }
   function ctlProp(name, kind, inMain) {
-    return ctlRef(inMain) + '.effect(' + q(name) + ')(' + q(kind) + ')';
+    // (1) = the control's single parameter, whatever the UI language calls it
+    return ctlRef(inMain) + '.effect(' + q(name) + ')(1)';
   }
   /** `value` unless the control resolves (a renamed comp / null must not break the layer) */
   function safeExpr(body, fallback) {
@@ -124,6 +125,44 @@ $.global.TWITCHSIM = (function () {
   }
   function num(v, d) {
     return typeof v === 'number' && isFinite(v) ? v : d;
+  }
+
+  // Effect Controls on the Controls null, grouped by prefix (AE has no folders in Effect Controls;
+  // the prefix keeps each group together and sorted the way the panel's tabs are)
+  var DOT = ' \u00b7 ';
+  var NM = {
+    style: 'Animation' + DOT + 'Style',
+    dur: 'Animation' + DOT + 'Duration (ms)',
+    ease: 'Animation' + DOT + 'Ease out (%)',
+    slide: 'Animation' + DOT + 'Slide distance (px)',
+    pop: 'Animation' + DOT + 'Pop from (%)',
+    gap: 'Layout' + DOT + 'Row gap (px)',
+    opacity: 'Look' + DOT + 'Opacity (%)',
+    textOn: 'Look' + DOT + 'Custom text color',
+    text: 'Look' + DOT + 'Text color',
+    nameOn: 'Look' + DOT + 'Custom name color',
+    name: 'Look' + DOT + 'Name color',
+    outline: 'Look' + DOT + 'Outline (px)',
+    shadow: 'Look' + DOT + 'Shadow (%)',
+    shadowSoft: 'Look' + DOT + 'Shadow softness',
+    shadowDist: 'Look' + DOT + 'Shadow distance',
+    bgOpacity: 'Look' + DOT + 'Background opacity (%)',
+    bgColor: 'Look' + DOT + 'Background color',
+    radius: 'Look' + DOT + 'Background corners (px)',
+    fade: 'Look' + DOT + 'Top fade (px)'
+  };
+  var ANIM_STYLES = ['Instant', 'Slide up', 'Slide up + fade', 'Fade', 'Slide from left', 'Slide from right', 'Pop'];
+
+  /** shared expression helpers: easing, growth of a row that arrived `age` seconds ago, marker data lookup */
+  var EXPR_LIB =
+    'function P(x, e) { x = Math.max(0, Math.min(1, x)); var c = 1 - Math.pow(1 - x, 3); return x + (c - x) * e; }\n' +
+    'function BACK(x) { var c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); }\n' +
+    'function GROW(st, age, dur, e) { if (st == 1) return 1; if (age <= 0) return 0; if (age >= dur) return 1; if (st == 4) return Math.min(1, 3 * age / dur); return P(age / dur, e); }\n' +
+    'function TS(L) { try { for (var q = 1; q <= L.marker.numKeys; q++) { var ch = L.marker.key(q).chapter; if (ch.indexOf("ts ") == 0) return ch.split(" "); } } catch (e) {} return null; }\n' +
+    'function CTL(C, n, t) { var p = C.effect(n)(1); return t === undefined ? p.value : p.valueAtTime(t); }\n';
+  /** the entrance parameters of the row that arrived at t0 (sampled at its arrival, so keyframed controls apply per row) */
+  function exprAnimAt(tExpr) {
+    return 'var st = Math.round(CTL(C, ' + q(NM.style) + ', ' + tExpr + '));\n' + 'var dur = Math.max(1, CTL(C, ' + q(NM.dur) + ', ' + tExpr + ')) / 1000;\n' + 'var e = Math.max(0, Math.min(1, CTL(C, ' + q(NM.ease) + ', ' + tExpr + ') / 100));\n';
   }
 
   // ---------------------------------------------------------------- fonts
@@ -445,9 +484,9 @@ $.global.TWITCHSIM = (function () {
         ds.property('dropShadow/distance').setValue(textOpts.shadowDist);
         ds.property('dropShadow/blur').setValue(textOpts.shadowSoft);
         ds.property('dropShadow/chokeMatte').setValue(0);
-        setExpr(ds.property('dropShadow/opacity'), safeExpr(ctlProp('Shadow', 'Slider', false)));
-        setExpr(ds.property('dropShadow/distance'), safeExpr(ctlProp('Shadow distance', 'Slider', false)));
-        setExpr(ds.property('dropShadow/blur'), safeExpr(ctlProp('Shadow softness', 'Slider', false)));
+        setExpr(ds.property('dropShadow/opacity'), safeExpr(ctlProp(NM.shadow, 'Slider', false)));
+        setExpr(ds.property('dropShadow/distance'), safeExpr(ctlProp(NM.shadowDist, 'Slider', false)));
+        setExpr(ds.property('dropShadow/blur'), safeExpr(ctlProp(NM.shadowSoft, 'Slider', false)));
         sk.property('frameFX/color').setValue([0, 0, 0, 1]);
         // size cannot go below 1: "no outline" = opacity 0. Canvas strokes are centred under the fill, so half shows.
         sk.property('frameFX/size').setValue(Math.max(1, textOpts.strokeWidth / 2));
@@ -455,15 +494,15 @@ $.global.TWITCHSIM = (function () {
         try {
           sk.property('frameFX/style').setValue(1); // outside
         } catch (e) {}
-        setExpr(sk.property('frameFX/size'), safeExpr('Math.max(1, ' + ctlProp('Outline', 'Slider', false) + ')'));
-        setExpr(sk.property('frameFX/opacity'), safeExpr(ctlProp('Outline', 'Slider', false) + ' > 0 ? 100 : 0'));
+        setExpr(sk.property('frameFX/size'), safeExpr('Math.max(1, ' + ctlProp(NM.outline, 'Slider', false) + ')'));
+        setExpr(sk.property('frameFX/opacity'), safeExpr(ctlProp(NM.outline, 'Slider', false) + ' > 0 ? 100 : 0'));
       }
       if (!role) so.enabled = false;
       else {
         so.property('solidFill/color').setValue([1, 1, 1, 1]);
         so.property('solidFill/opacity').setValue(0);
-        setExpr(so.property('solidFill/color'), safeExpr(ctlProp(role === 'name' ? 'Name color' : 'Text color', 'Color', false)));
-        setExpr(so.property('solidFill/opacity'), safeExpr(ctlProp(role === 'name' ? 'Custom name color' : 'Custom text color', 'Checkbox', false) + ' > 0 ? 100 : 0', '0'));
+        setExpr(so.property('solidFill/color'), safeExpr(ctlProp(role === 'name' ? NM.name : NM.text, 'Color', false)));
+        setExpr(so.property('solidFill/opacity'), safeExpr(ctlProp(role === 'name' ? NM.nameOn : NM.textOn, 'Checkbox', false) + ' > 0 ? 100 : 0', '0'));
       }
     } catch (e) {}
     st.templates[key] = tl;
@@ -526,19 +565,140 @@ $.global.TWITCHSIM = (function () {
     var fx = layer.property('ADBE Effect Parade');
     var bgd = data.background || { color: [0.09, 0.09, 0.1], opacity: 0, radius: 0 };
     var stroke = num(data.text.strokeWidth, 0);
-    addControl(fx, 'ADBE Slider Control', 'Opacity', 'ADBE Slider Control-0001', 100);
-    addControl(fx, 'ADBE Checkbox Control', 'Custom text color', 'ADBE Checkbox Control-0001', 0);
-    addControl(fx, 'ADBE Color Control', 'Text color', 'ADBE Color Control-0001', [1, 1, 1, 1]);
-    addControl(fx, 'ADBE Checkbox Control', 'Custom name color', 'ADBE Checkbox Control-0001', 0);
-    addControl(fx, 'ADBE Color Control', 'Name color', 'ADBE Color Control-0001', [1, 1, 1, 1]);
-    addControl(fx, 'ADBE Slider Control', 'Outline', 'ADBE Slider Control-0001', stroke / 2);
-    addControl(fx, 'ADBE Slider Control', 'Shadow', 'ADBE Slider Control-0001', data.text.shadow ? 85 : 0);
-    addControl(fx, 'ADBE Slider Control', 'Shadow softness', 'ADBE Slider Control-0001', 3 * data.scale);
-    addControl(fx, 'ADBE Slider Control', 'Shadow distance', 'ADBE Slider Control-0001', 1 * data.scale);
-    addControl(fx, 'ADBE Slider Control', 'Background opacity', 'ADBE Slider Control-0001', num(bgd.opacity, 0));
-    addControl(fx, 'ADBE Color Control', 'Background color', 'ADBE Color Control-0001', [bgd.color[0], bgd.color[1], bgd.color[2], 1]);
-    addControl(fx, 'ADBE Slider Control', 'Corner radius', 'ADBE Slider Control-0001', num(bgd.radius, 0));
-    addControl(fx, 'ADBE Slider Control', 'Top fade', 'ADBE Slider Control-0001', Math.max(0, num(data.fadeTop, 0)));
+    var an = data.anim || { style: 2, ms: 300, slidePx: 340 };
+    // Animation — how rows come in (sampled per row at its arrival, so keyframes apply to later rows)
+    var styleOk = false;
+    try {
+      var dd = fx.addProperty('ADBE Dropdown Control');
+      // setPropertyParameters re-creates the effect: name it afterwards, through the returned property
+      var menu = dd.property(1).setPropertyParameters(ANIM_STYLES);
+      menu.parentProperty.name = NM.style;
+      menu.setValue(Math.max(1, Math.min(ANIM_STYLES.length, num(an.style, 2))));
+      styleOk = fx.property(fx.numProperties).name === NM.style;
+      if (!styleOk) fx.property(fx.numProperties).remove();
+    } catch (e) {}
+    if (!styleOk) addControl(fx, 'ADBE Slider Control', NM.style, 'ADBE Slider Control-0001', num(an.style, 2)); // AE < 17.0.1: 1 Instant, 2 Slide up, 3 Slide up + fade, 4 Fade, 5 Slide from left, 6 Slide from right, 7 Pop
+    addControl(fx, 'ADBE Slider Control', NM.dur, 'ADBE Slider Control-0001', num(an.ms, 300));
+    addControl(fx, 'ADBE Slider Control', NM.ease, 'ADBE Slider Control-0001', 100);
+    addControl(fx, 'ADBE Slider Control', NM.slide, 'ADBE Slider Control-0001', num(an.slidePx, 340));
+    addControl(fx, 'ADBE Slider Control', NM.pop, 'ADBE Slider Control-0001', 70);
+    // Layout
+    addControl(fx, 'ADBE Slider Control', NM.gap, 'ADBE Slider Control-0001', 0);
+    // Look
+    addControl(fx, 'ADBE Slider Control', NM.opacity, 'ADBE Slider Control-0001', 100);
+    addControl(fx, 'ADBE Checkbox Control', NM.textOn, 'ADBE Checkbox Control-0001', 0);
+    addControl(fx, 'ADBE Color Control', NM.text, 'ADBE Color Control-0001', [1, 1, 1, 1]);
+    addControl(fx, 'ADBE Checkbox Control', NM.nameOn, 'ADBE Checkbox Control-0001', 0);
+    addControl(fx, 'ADBE Color Control', NM.name, 'ADBE Color Control-0001', [1, 1, 1, 1]);
+    addControl(fx, 'ADBE Slider Control', NM.outline, 'ADBE Slider Control-0001', stroke / 2);
+    addControl(fx, 'ADBE Slider Control', NM.shadow, 'ADBE Slider Control-0001', data.text.shadow ? 85 : 0);
+    addControl(fx, 'ADBE Slider Control', NM.shadowSoft, 'ADBE Slider Control-0001', 3 * data.scale);
+    addControl(fx, 'ADBE Slider Control', NM.shadowDist, 'ADBE Slider Control-0001', 1 * data.scale);
+    addControl(fx, 'ADBE Slider Control', NM.bgOpacity, 'ADBE Slider Control-0001', num(bgd.opacity, 0));
+    addControl(fx, 'ADBE Color Control', NM.bgColor, 'ADBE Color Control-0001', [bgd.color[0], bgd.color[1], bgd.color[2], 1]);
+    addControl(fx, 'ADBE Slider Control', NM.radius, 'ADBE Slider Control-0001', num(bgd.radius, 0));
+    addControl(fx, 'ADBE Slider Control', NM.fade, 'ADBE Slider Control-0001', Math.max(0, num(data.fadeTop, 0)));
+  }
+
+  /**
+   * Entrance + stack expressions for one message layer. The settled position is baked (hold keys); the
+   * expressions add, live from the Controls null: the row's own entrance (slide / fade / pop) and the
+   * transient of older rows still growing in (the canvas stacks on their *allotted* height, so a new
+   * row starts higher and settles down as they finish). Rows read each other through a marker on each
+   * message layer: chapter "ts <arrival> <height> <deleted height> <deletion time>".
+   */
+  function messageExpressions(ml, msg) {
+    var lit = 'var t0 = ' + msg.t0 + ', e0 = ' + msg.epochStart + ', idx = ' + num(msg.idx, 0) + ';\n';
+    var head = lit + EXPR_LIB + 'var v = value;\ntry {\n  var C = ' + ctlRef(true) + ';\n';
+    var tail = '} catch (err) {}\nv';
+    // Y (local, inside Scroll): + row gap, - transient of older rows still growing
+    var y =
+      head +
+      '  var gap = CTL(C, ' + q(NM.gap) + ');\n' +
+      '  var tr = 0;\n' +
+      '  for (var j = index + 1; j <= thisComp.numLayers; j++) {\n' +
+      '    var a = TS(thisComp.layer(j));\n' +
+      '    if (!a) continue;\n' +
+      '    var tk = parseFloat(a[1]);\n' +
+      '    if (tk < e0) break;\n' + // older than my /clear: everything below is older still
+      '    if (tk > t0) continue;\n' +
+      '    var age = time - tk;\n' +
+      '    if (age >= 5) break;\n' + // layers are in arrival order: the rest is older
+      '    if (age < 0) continue;\n' +
+      '    ' + exprAnimAt('tk').replace(/\n/g, '\n    ') + 'var g = GROW(st, age, dur, e);\n' +
+      '    if (g < 1) tr += (time >= parseFloat(a[4]) ? parseFloat(a[3]) : parseFloat(a[2])) * (1 - g);\n' +
+      '  }\n' +
+      '  v = value + gap * idx - tr;\n' +
+      tail;
+    // X: slide from left / right
+    var x =
+      head +
+      '  var age = time - t0;\n' +
+      '  ' + exprAnimAt('t0').replace(/\n/g, '\n  ') + 'if ((st == 5 || st == 6) && age >= 0 && age < dur) {\n' +
+      '    var p = P(age / dur, e);\n' +
+      '    v = value + (st == 5 ? -1 : 1) * CTL(C, ' + q(NM.slide) + ', t0) * (1 - p);\n' +
+      '  }\n' +
+      tail;
+    // opacity: fade-ins × the global Look opacity
+    var o =
+      head +
+      '  var look = CTL(C, ' + q(NM.opacity) + ') / 100;\n' +
+      '  var a = 1;\n' +
+      '  var age = time - t0;\n' +
+      '  ' + exprAnimAt('t0').replace(/\n/g, '\n  ') + 'if (age >= 0 && age < dur) {\n' +
+      '    var x = age / dur;\n' +
+      '    if (st == 3 || st == 4) a = P(x, e);\n' +
+      '    else if (st == 5 || st == 6) a = Math.min(1, 2 * x);\n' +
+      '    else if (st == 7) a = Math.min(1, 2.5 * x);\n' +
+      '  }\n' +
+      '  v = value * a * look;\n' +
+      tail;
+    // scale: pop
+    var sc =
+      head +
+      '  var age = time - t0;\n' +
+      '  ' + exprAnimAt('t0').replace(/\n/g, '\n  ') + 'if (st == 7 && age >= 0 && age < dur) {\n' +
+      '    var ps = CTL(C, ' + q(NM.pop) + ', t0) / 100;\n' +
+      '    var k = (ps + (1 - ps) * BACK(age / dur)) * 100;\n' +
+      '    v = [k, k];\n' +
+      '  }\n' +
+      tail;
+    var t = tf(ml);
+    setExpr(t.property('ADBE Position_1'), y);
+    setExpr(t.property('ADBE Position_0'), x);
+    setExpr(t.property('ADBE Opacity'), o);
+    setExpr(t.property('ADBE Scale'), sc);
+  }
+
+  /** Scroll null Y: baked hold keys (every instant push-up) + live growth transient and row gap */
+  function scrollExpression(clears) {
+    var cl = [];
+    for (var i = 0; i < (clears || []).length; i++) cl.push(String(clears[i]));
+    return (
+      'var clears = [' + cl.join(', ') + '];\n' +
+      EXPR_LIB +
+      'var v = value;\ntry {\n' +
+      '  var C = ' + ctlRef(true) + ';\n' +
+      '  var gap = CTL(C, ' + q(NM.gap) + ');\n' +
+      '  var e0 = -1e9;\n' +
+      '  for (var i = 0; i < clears.length; i++) if (clears[i] <= time) e0 = clears[i];\n' +
+      '  var count = 0, tr = 0;\n' +
+      '  for (var j = 1; j <= thisComp.numLayers; j++) {\n' +
+      '    var a = TS(thisComp.layer(j));\n' +
+      '    if (!a) continue;\n' +
+      '    var tk = parseFloat(a[1]);\n' +
+      '    if (tk < e0) break;\n' +
+      '    if (tk > time) continue;\n' +
+      '    var age = time - tk;\n' +
+      '    if (gap != 0) count++;\n' +
+      '    if (age < 5) {\n' +
+      '      ' + exprAnimAt('tk').replace(/\n/g, '\n      ') + 'var g = GROW(st, age, dur, e);\n' +
+      '      if (g < 1) tr += (time >= parseFloat(a[4]) ? parseFloat(a[3]) : parseFloat(a[2])) * (1 - g);\n' +
+      '    } else if (gap == 0) break;\n' +
+      '  }\n' +
+      '  v = value - gap * Math.max(0, count - 1) + tr;\n' +
+      '} catch (err) {}\nv'
+    );
   }
 
   function buildMessage(msg) {
@@ -579,14 +739,15 @@ $.global.TWITCHSIM = (function () {
       .setValue([0, msg.h / 2]);
     var pos = tf(ml).property('ADBE Position');
     pos.setValue([0, msg.localY + msg.h / 2]);
-    setExpr(tf(ml).property('ADBE Opacity'), safeExpr('value * ' + ctlProp('Opacity', 'Slider', true) + ' / 100'));
-    if (msg.anim) {
-      if (msg.anim.opacity) applyKeys(tf(ml).property('ADBE Opacity'), msg.anim.opacity, 1);
-      if (msg.anim.x || msg.anim.y) pos.dimensionsSeparated = true;
-      if (msg.anim.x) applyKeys(tf(ml).property('ADBE Position_0'), msg.anim.x, 1);
-      if (msg.anim.y) applyKeys(tf(ml).property('ADBE Position_1'), msg.anim.y, 1);
-      if (msg.anim.scale) applyKeys(tf(ml).property('ADBE Scale'), msg.anim.scale, 2);
-    }
+    pos.dimensionsSeparated = true;
+    if (msg.yKeys) applyKeys(tf(ml).property('ADBE Position_1'), msg.yKeys, 1);
+    // row data for the expressions of the Scroll null and of newer rows (chapter text: invisible in the timeline)
+    try {
+      var mv = new MarkerValue('');
+      mv.chapter = 'ts ' + msg.t0 + ' ' + msg.h + ' ' + num(msg.hDel, msg.h) + ' ' + num(msg.delAt, 1e9);
+      ml.property('ADBE Marker').setValueAtTime(msg.inT, mv);
+    } catch (e) {}
+    messageExpressions(ml, msg);
     if (st.matte) {
       try {
         ml.setTrackMatte(st.matte, TrackMatteType.LUMA);
@@ -776,9 +937,9 @@ $.global.TWITCHSIM = (function () {
       tf(bg).property('ADBE Anchor Point').setValue([0, 0]);
       try {
         var bgg = bg.property('ADBE Root Vectors Group').property(1).property('ADBE Vectors Group');
-        setExpr(bgg.property('ADBE Vector Graphic - Fill').property('ADBE Vector Fill Color'), safeExpr(ctlProp('Background color', 'Color', true)));
-        setExpr(bgg.property('ADBE Vector Graphic - Fill').property('ADBE Vector Fill Opacity'), safeExpr(ctlProp('Background opacity', 'Slider', true)));
-        setExpr(bgg.property('ADBE Vector Shape - Rect').property('ADBE Vector Rect Roundness'), safeExpr(ctlProp('Corner radius', 'Slider', true)));
+        setExpr(bgg.property('ADBE Vector Graphic - Fill').property('ADBE Vector Fill Color'), safeExpr(ctlProp(NM.bgColor, 'Color', true)));
+        setExpr(bgg.property('ADBE Vector Graphic - Fill').property('ADBE Vector Fill Opacity'), safeExpr(ctlProp(NM.bgOpacity, 'Slider', true)));
+        setExpr(bgg.property('ADBE Vector Shape - Rect').property('ADBE Vector Rect Roundness'), safeExpr(ctlProp(NM.radius, 'Slider', true)));
       } catch (e) {}
 
       var scroll = main.layers.addNull(dur);
@@ -808,7 +969,7 @@ $.global.TWITCHSIM = (function () {
           ramp.property('ADBE Ramp-0002').setValue([0, 0, 0, 1]);
           ramp.property('ADBE Ramp-0003').setValue([data.chat.w / 2, Math.max(0, num(data.fadeTop, 0))]);
           ramp.property('ADBE Ramp-0004').setValue([1, 1, 1, 1]);
-          setExpr(ramp.property('ADBE Ramp-0003'), safeExpr('[value[0], Math.max(0, ' + ctlProp('Top fade', 'Slider', true) + ')]'));
+          setExpr(ramp.property('ADBE Ramp-0003'), safeExpr('[value[0], Math.max(0, ' + ctlProp(NM.fade, 'Slider', true) + ')]'));
         } catch (e) {}
         st.matte = matte;
       }
@@ -838,12 +999,13 @@ $.global.TWITCHSIM = (function () {
     var d = st.data;
     app.beginUndoGroup('TwitchSim: build (finish)');
     try {
-      // the one animated property: Scroll null Y
+      // Scroll null Y: hold keys for every instant push-up; the expression adds the entrance growth + row gap
       var pos = tf(st.scroll).property('ADBE Position');
       pos.setValue([0, 0]);
       pos.dimensionsSeparated = true;
       var py = tf(st.scroll).property('ADBE Position_1');
       applyKeys(py, d.scroll, 1);
+      setExpr(py, scrollExpression(d.clears));
       if (st.matte) {
         st.matte.moveToBeginning();
         st.matte.enabled = false;

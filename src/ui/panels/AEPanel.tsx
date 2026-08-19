@@ -211,13 +211,19 @@ export function AEPanel({ cfg, set, patch, timeline, assets }: { cfg: Config; se
       <Collapsible title="What you get & how to tweak it">
         <ul className="help-list">
           <li>
-            <b>Main comp</b>: <i>TwitchSim Controls</i> (null, top layer — everything is parented to it: move / scale / rotate it to place the whole chat, and its <b>Effect Controls</b> hold the live tweaks: opacity, custom text & name colour, outline, shadow, background colour / opacity / corner radius, top fade — all wired with expressions, no rebuild), <i>Chat area</i> (matte), one layer per message named <code>msg 012 · username</code>, <i>Scroll</i> (null — the only animated thing; every push-up is a keyframe on its Y) and <i>Background</i>.
+            <b>Main comp</b>: <i>TwitchSim Controls</i> (null, top layer — everything is parented to it: move / scale / rotate it to place the whole chat), <i>Chat area</i> (matte), one layer per message named <code>msg 012 · username</code>, <i>Scroll</i> (null — the stack's push-ups: hold keys + an expression) and <i>Background</i>.
+          </li>
+          <li>
+            <b>Effect Controls of the Controls null</b> (all keyframable, wired to the layers with expressions — no rebuild): <b>Animation ·</b> Style (dropdown: instant / slide up / slide up + fade / fade / slide from left / right / pop), Duration, Ease out, Slide distance, Pop from — every message reads them at the moment it arrives, so a keyframed Duration changes how <i>later</i> messages come in; <b>Layout ·</b> Row gap; <b>Look ·</b> Opacity, custom text & name colour, Outline, Shadow (+ softness / distance), Background colour / opacity / corners, Top fade. Prefixes group them (AE has no folders in Effect Controls).
+          </li>
+          <li>
+            <b>Pace of the chat</b> (messages per minute) is timing, not animation: change it in the panel and rebuild, or nest this comp and time-remap / time-stretch it.
           </li>
           <li>
             <b>Parent to a message</b>: pick its <code>msg NNN</code> layer as parent — arrows, boxes, whatever you attach rides along as the chat scrolls. Each message layer is a precomp with its text, badges and emotes inside, so you can also open it and restyle a single message.
           </li>
           <li>
-            <b>Live in AE</b>: everything on the Controls null, retiming the scroll (drag its keyframes / time-remap the comp), effects, motion blur, per-message tweaks. <b>Rebuild needed</b>: text changes, chat width, font size, new lines (the panel re-flows the layout).
+            <b>Live in AE</b>: everything on the Controls null, effects, motion blur, per-message tweaks. <b>Rebuild needed</b>: text changes, chat width, font size, new lines, chat speed (the panel re-flows the layout / timing).
           </li>
           <li>Rebuilding with the same comp name updates the comp in place — where you already used it stays valid, and your own layers inside it are kept and re-parented to the message with the same name. (The text-colour / outline / shadow expressions inside the message precomps find the Controls null through the comp's name, so if you rename the comp, build once more.)</li>
           <li>Text uses the Inter font (Twitch's font) — install it if AE shows a substitute. Alpha: the comp is transparent wherever the chat is; render ProRes 4444 or use it directly inside your edit.</li>

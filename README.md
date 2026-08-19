@@ -110,13 +110,14 @@ What gets built:
 
 | Layer | What it is |
 |---|---|
-| `TwitchSim Controls` (null, top layer) | everything is parented to it — move / scale / rotate it to place the whole chat. Its **Effect Controls** are the live tweaks, wired to the layers below with expressions (no rebuild): opacity, custom text colour, custom name colour, outline, shadow (+ softness / distance), background colour / opacity / corner radius, top fade |
+| `TwitchSim Controls` (null, top layer) | everything is parented to it — move / scale / rotate it to place the whole chat. Its **Effect Controls** are the live, keyframable tweaks, wired to the layers with expressions (no rebuild), grouped by prefix: **Animation ·** Style (dropdown), Duration, Ease out, Slide distance, Pop from — sampled by each message at its arrival; **Layout ·** Row gap; **Look ·** Opacity, custom text / name colour, Outline, Shadow (+ softness / distance), Background colour / opacity / corners, Top fade |
 | `Background` (shape) | the panel behind the chat (opacity 0 for transparent looks — turn it up on the Controls null) |
-| `Scroll` (null) | **the only animated thing** — every push-up of the stack is a keyframe on its Y position (retime it, ease it, time-remap the comp…) |
-| `msg 012 · username` (precomp, one per message) | parent anything to it and it rides along; open it to restyle a single message: badges/emotes are footage layers, name & text are text layers (Inter), notice boxes / highlight pills are shape layers |
+| `Scroll` (null) | the stack's push-ups: a hold key per arrival / deletion / clear on its Y, plus an expression that adds the smooth growth of rows animating in (and the row gap) |
+| `msg 012 · username` (precomp, one per message) | parent anything to it and it rides along; open it to restyle a single message: badges/emotes are footage layers, name & text are text layers (Inter), notice boxes / highlight pills are shape layers. Its entrance (slide / fade / pop) is an expression on position / opacity / scale reading the Controls null; a marker at its start carries the row data the expressions share |
 | `Chat area (matte)` | luma matte that clips rows to the chat rectangle (and carries the top fade) |
 
 The text-colour / outline / shadow controls reach into the message precomps through the comp's name — if you rename the comp, build once more.
+The pace of the chat (messages per minute) is timing, not animation: change it in the panel and rebuild, or nest the comp and time-remap / time-stretch it.
 Building again with the **same comp name updates the comp in place** (it stays valid wherever you already used it, and your own layers inside
 it are kept and re-parented to the message with the same name). Text edits, chat width, font size and new lines need a rebuild — the panel
 re-flows the layout, exactly like the preview. Badge & emote PNGs are written next to your project (`<project>/TwitchSim/<comp>/`), or in

@@ -9,8 +9,11 @@
  *     │                             Effect Controls (opacity, colours, outline, shadow, background, top
  *     │                             fade) drive the layers below through expressions
  *     ├ Chat area (matte) — clips rows to the chat rect, carries the top fade (Ramp)
- *     ├ msg NNN · user   ← one precomp per message, static position, parented to "Scroll"
- *     ├ Scroll (null)    ← the ONE animated property: every push-up of the stack lives here
+ *     ├ msg NNN · user   ← one precomp per message, parented to "Scroll"; hold keys give the settled
+ *     │                     position, expressions add the entrance animation (style / duration / distance
+ *     │                     / ease / pop from the Controls null, sampled at the row's arrival)
+ *     ├ Scroll (null)    ← hold keys = every instant push-up of the stack; an expression adds the smooth
+ *     │                     growth of rows still animating in (+ the live row gap)
  *     └ Background (shape; opacity 0 when the look is transparent)
  */
 import type { Config } from '../core/types'
@@ -57,8 +60,18 @@ export interface SceneMessage {
   localY: number
   inT: number
   outT: number
-  /** entrance animation keys (absolute comp times); y = local offset jumps caused by deletions above */
-  anim: { opacity?: Key[]; x?: Key[]; scale?: Key[]; y?: Key[] }
+  /** true arrival time (comp seconds; negative for rows that were already there at 0) — the entrance animation counts from here */
+  t0: number
+  /** height of the "deleted" layout at scale (= h when the message is never deleted) */
+  hDel: number
+  /** absolute comp time the deleted look starts (1e9 = never) */
+  delAt: number
+  /** comp time of the /clear this row's epoch started with (-1e9 = none) */
+  epochStart: number
+  /** how many earlier rows share the epoch (drives the live "row gap") */
+  idx: number
+  /** hold keys for the local Y (row centre) — jumps when an older row's deleted layout changes height */
+  yKeys?: Key[]
   /** if the message gets deleted: precomp-relative time when the "deleted" state starts */
   deletedAtRel?: number
   layers: MsgLayer[]
@@ -91,6 +104,11 @@ export interface SceneData {
   /** px at scale; 0 = off */
   fadeTop: number
   text: { shadow: boolean; strokeWidth: number }
+  /** entrance animation defaults for the Controls null (style index = the dropdown order in the host) */
+  anim: { style: number; ms: number; slidePx: number }
+  /** /clear times (comp seconds) — the Scroll expression counts rows per epoch */
+  clears: number[]
+  /** hold keys: the stack's instant push-ups (arrivals, deletions, clears); the growth transient is an expression */
   scroll: Key[]
   assets: SceneAsset[]
   messages: SceneMessage[]
@@ -150,15 +168,6 @@ function parseFont(font: string): FontSpec {
   const m = font.match(/^(italic\s+)?(\d+)\s+([\d.]+)px\s+"([^"]+)"/)
   if (!m) return { family: 'Inter', weight: 400, italic: false, size: 14 }
   return { family: m[4], weight: parseInt(m[2], 10), italic: !!m[1], size: parseFloat(m[3]) }
-}
-
-function easeOutCubic(x: number): number {
-  return 1 - Math.pow(1 - x, 3)
-}
-function easeOutBack(x: number): number {
-  const c1 = 1.70158
-  const c3 = c1 + 1
-  return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2)
 }
 
 function hashStr(s: string): string {
@@ -444,29 +453,8 @@ function emitRow(L: RowLayout, ctx: RowCtx, state?: 'normal' | 'deleted', effect
 // scene compiler
 // ---------------------------------------------------------------------------
 
-type Grow = { kind: 'hold' } | { kind: 'linear'; dur: number } | { kind: 'cubic'; dur: number }
-
-function growFor(cfg: Config): Grow {
-  const dur = Math.max(1, cfg.animationMs) / 1000
-  if (cfg.animation === 'instant') return { kind: 'hold' }
-  if (cfg.animation === 'fade') return { kind: 'linear', dur: dur / 3 }
-  return { kind: 'cubic', dur }
-}
-
-/** growth fraction of a row that arrived at t0, evaluated at time t (t ≥ t0) */
-function growAt(g: Grow, age: number): number {
-  if (age < 0) return 0
-  if (g.kind === 'hold') return 1
-  if (age >= g.dur) return 1
-  const x = age / g.dur
-  return g.kind === 'linear' ? x : easeOutCubic(x)
-}
-/** d(grow)/dt at age (right-sided) */
-function growSlope(g: Grow, age: number): number {
-  if (g.kind === 'hold' || age < 0 || age >= g.dur) return 0
-  const x = age / g.dur
-  return g.kind === 'linear' ? 1 / g.dur : (3 * Math.pow(1 - x, 2)) / g.dur
-}
+/** order of the "Animation · Style" dropdown on the Controls null (see the host script) */
+const ANIM_STYLE_INDEX: Record<string, number> = { instant: 1, slide: 2, 'slide-up': 2, 'slide-fade': 3, fade: 4, 'slide-left': 5, 'slide-right': 6, pop: 7 }
 
 export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts: SceneOptions): Scene {
   const style = styleFromConfig(cfg)
@@ -478,8 +466,6 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
   const fps = cfg.exportFps
   const durationSec = tl.durationMs / 1000
   const frameDur = 1 / fps
-  const grow = growFor(cfg)
-  const gdur = grow.kind === 'hold' ? 0 : grow.dur
   const writer = new AssetWriter(assets, fps, cfg.animatedEmotes)
   const env = { style, assets, hiRes: true }
   const rowCtx: RowCtx = { style, s, writer, W }
@@ -523,65 +509,32 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
   })
   // local offset inside the scroll null: heights (as of this row's arrival) of all earlier rows of the same epoch
   const C: number[] = new Array(N).fill(0)
+  const idxInEpoch: number[] = new Array(N).fill(0)
   for (let i = 0; i < N; i++) {
     let sum = 0
-    for (let k = 0; k < i; k++) if (epoch[k] === epoch[i]) sum += hAt(k, t[i])
+    let n = 0
+    for (let k = 0; k < i; k++) {
+      if (epoch[k] !== epoch[i]) continue
+      sum += hAt(k, t[i])
+      n++
+    }
     C[i] = sum
+    idxInEpoch[i] = n
   }
   const visibleAt = (k: number, tau: number) => t[k] <= tau && tau < hiddenAt[k]
+  /** settled stack height (every row at its full height — the entrance growth is an expression in AE) */
   const S = (tau: number) => {
     let sum = 0
-    for (let k = 0; k < N; k++) if (visibleAt(k, tau)) sum += hAt(k, tau) * growAt(grow, tau - t[k])
-    return sum
-  }
-  const Sslope = (tau: number, side: -1 | 1) => {
-    let sum = 0
-    for (let k = 0; k < N; k++) {
-      if (!visibleAt(k, tau)) continue
-      const age = tau - t[k]
-      // right-side slope at exactly the event start is 3/dur; left-side is 0
-      if (side < 0 && age <= 1e-9) continue
-      if (side < 0 && Math.abs(age - gdur) < 1e-9) continue
-      sum += hAt(k, side < 0 ? tau - 1e-6 : tau) * growSlope(grow, side < 0 ? Math.min(age, gdur - 1e-9) : age)
-    }
+    for (let k = 0; k < N; k++) if (visibleAt(k, tau)) sum += hAt(k, tau)
     return sum
   }
 
-  // ---- scroll keys ----
-  // key times are rounded so two events landing on (almost) the same instant become one key
+  // ---- scroll keys (hold: the stack jumps at every event, the expression smooths the arrivals) ----
   const times = new Set<number>([0])
-  for (let k = 0; k < N; k++) {
-    if (t[k] >= 0 && t[k] <= durationSec) times.add(rt(t[k]))
-    if (gdur > 0 && t[k] + gdur > 0 && t[k] + gdur <= durationSec) times.add(rt(t[k] + gdur))
-  }
-  times.add(rt(durationSec)) // rows arriving in the last animation still push up until the end
-  const holdBefore = new Set<number>()
-  const jumps = [...clears, ...del.filter((d) => d !== Infinity)]
-  for (const c of jumps) {
-    if (c <= 0 || c > durationSec) continue
-    times.add(rt(c))
-    const before = rt(Math.max(0, c - 0.001)) // hold right up to the jump
-    times.add(before)
-    holdBefore.add(before)
-  }
+  for (let k = 0; k < N; k++) if (t[k] >= 0 && t[k] <= durationSec) times.add(rt(t[k]))
+  for (const c of [...clears, ...del.filter((d) => d !== Infinity)]) if (c > 0 && c <= durationSec) times.add(rt(c))
   const keyTimes = [...times].sort((a, b) => a - b)
-  const scroll: Key[] = []
-  const interp: Key['interp'] = grow.kind === 'hold' ? 'hold' : grow.kind === 'linear' ? 'linear' : 'bezier'
-  for (let j = 0; j < keyTimes.length; j++) {
-    const tau = keyTimes[j]
-    const key: Key = { t: rt(tau), v: r3((H - pb - S(tau)) * s), interp }
-    if (holdBefore.has(tau)) key.holdOut = true
-    if (interp === 'bezier') {
-      // Between two consecutive keys the set of animating rows is fixed, so S(t) is one cubic
-      // polynomial there — a bezier with handles at exactly 1/3 of the segment and the true
-      // one-sided slopes at both ends reproduces it exactly (cubic Hermite = cubic Bezier).
-      key.inSpeed = r3(-Sslope(tau, -1) * s)
-      key.outSpeed = r3(-Sslope(tau, 1) * s)
-      key.inInf = 33.333
-      key.outInf = 33.333
-    }
-    scroll.push(key)
-  }
+  const scroll: Key[] = keyTimes.map((tau) => ({ t: rt(tau), v: r3((H - pb - S(tau)) * s), interp: 'hold' as const }))
   // S evaluated at key times, for out-point lookups
   const Skeys = keyTimes.map((tau) => S(tau))
 
@@ -590,14 +543,6 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
   let layerCount = 0
   let keyCount = scroll.length
   const dur = Math.max(1, cfg.animationMs) / 1000
-  const easeKeys = (t0: number, from: number, to: number, d: number): Key[] => [
-    { t: r3(t0), v: r3(from), interp: 'bezier', inSpeed: 0, outSpeed: r3((3 * (to - from)) / d), inInf: 33.333, outInf: 33.333 },
-    { t: r3(t0 + d), v: r3(to), interp: 'bezier', inSpeed: 0, outSpeed: 0, inInf: 33.333, outInf: 33.333 },
-  ]
-  const linKeys = (t0: number, from: number, to: number, d: number): Key[] => [
-    { t: r3(t0), v: r3(from), interp: 'linear' },
-    { t: r3(t0 + d), v: r3(to), interp: 'linear' },
-  ]
   for (let i = 0; i < N; i++) {
     const m = msgs[i]
     const L = layouts[i]
@@ -606,7 +551,9 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
     if (hiddenAt[i] <= inT) continue // wiped by a /clear before it could ever show
     const hMax = Math.max(h[i], layoutsDel[i]?.height ?? 0)
     // out point: the row's *last* exit above the top edge (the stack can shrink again when a newer row's
-    // "deleted" layout is shorter — the canvas slides everything back down), or the clear that hides it
+    // "deleted" layout is shorter — the canvas slides everything back down), or the clear that hides it.
+    // The entrance growth (an expression, duration adjustable in AE) delays every push-up, so keep the
+    // layer alive a while longer than the settled model says — the matte hides it anyway.
     let outT = Math.min(durationSec, hiddenAt[i])
     {
       const jumpsAbove: { at: number; d: number }[] = []
@@ -622,7 +569,7 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
           if (above === null) above = keyTimes[j]
         } else above = null
       }
-      if (above !== null) outT = Math.min(outT, above)
+      if (above !== null) outT = Math.min(outT, above + Math.max(3, 4 * dur))
     }
     if (outT <= inT) outT = Math.min(durationSec, inT + frameDur)
     const layerStart = inT
@@ -633,80 +580,27 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
       deletedAtRel = r3(del[i] - layerStart)
       layers = [...emitRow(L, rowCtx, 'normal', m.t), ...emitRow(layoutsDel[i]!, rowCtx, 'deleted', m.t)]
     } else layers = emitRow(L, rowCtx, undefined, m.t)
-    // entrance animation
-    const anim: SceneMessage['anim'] = {}
-    // Local offset inside the scroll null. Static = C[i], except:
-    //  (a) older rows still growing in when this row arrives — the canvas stacks on their *allotted*
-    //      height, so this row starts higher and settles down as they finish (a cubic transient),
-    //  (b) older rows deleted while this row is on screen change height → hold-key jumps.
+    // Local Y (row centre) inside the scroll null: C[i], jumping when an older row is deleted while this
+    // one is on screen (its layout changes height). The entrance transient of older rows still growing
+    // in is added live by the position expression.
+    let yKeys: Key[] | undefined
     {
-      const growing: number[] = [] // k < i whose entrance is still running at t_i
-      if (gdur > 0) for (let k = 0; k < i; k++) if (epoch[k] === epoch[i] && t[k] + gdur > t[i] && t[k] <= t[i] && hiddenAt[k] > t[i]) growing.push(k)
       const jumps: { at: number; d: number }[] = []
       for (let k = 0; k < i; k++) {
         if (epoch[k] !== epoch[i] || del[k] === Infinity || !layoutsDel[k]) continue
         if (del[k] > t[i] && del[k] < hiddenAt[i] && del[k] <= durationSec) jumps.push({ at: del[k], d: layoutsDel[k]!.height - h[k] })
       }
-      if (growing.length || jumps.length) {
-        // local y (row top, 1x px) at time tau, and its one-sided slope
-        const localAt = (tau: number) => {
-          let v = C[i]
-          for (const k of growing) v -= h[k] * (1 - growAt(grow, tau - t[k]))
-          for (const j of jumps) if (tau >= j.at) v += j.d
-          return v
-        }
-        const slopeAt = (tau: number, side: -1 | 1) => {
-          let v = 0
-          for (const k of growing) {
-            const age = tau - t[k]
-            if (side < 0 && (age <= 1e-9 || Math.abs(age - gdur) < 1e-9)) continue
-            v += h[k] * growSlope(grow, side < 0 ? Math.min(age, gdur - 1e-9) : age)
-          }
-          return v
-        }
-        const times = new Set<number>([rt(inT)])
-        for (const k of growing) if (t[k] + gdur > inT) times.add(rt(Math.min(durationSec, t[k] + gdur))) // an end key even if the growth outlives the comp
-        const holdAt = new Set<number>()
+      if (jumps.length) {
+        jumps.sort((a, b) => a.at - b.at)
+        yKeys = [{ t: rt(inT), v: r3((C[i] + h[i] / 2) * s), interp: 'hold' }]
+        let acc = C[i]
         for (const j of jumps) {
-          times.add(rt(j.at))
-          const before = rt(Math.max(inT, j.at - 0.001)) // hold right up to the jump (a whole frame earlier showed a stale frame)
-          times.add(before)
-          holdAt.add(before)
+          acc += j.d
+          yKeys.push({ t: rt(j.at), v: r3((acc + h[i] / 2) * s), interp: 'hold' })
         }
-        const ks: Key[] = []
-        const sorted = [...times].filter((x) => x <= durationSec).sort((a, b) => a - b)
-        for (const tau of sorted) {
-          const key: Key = { t: tau, v: r3((localAt(tau) + h[i] / 2) * s), interp }
-          if (interp === 'bezier') {
-            key.inSpeed = r3(slopeAt(tau, -1) * s)
-            key.outSpeed = r3(slopeAt(tau, 1) * s)
-            key.inInf = 33.333
-            key.outInf = 33.333
-          }
-          if (holdAt.has(tau)) key.holdOut = true
-          ks.push(key)
-        }
-        anim.y = ks
       }
     }
-    if (t[i] >= 0 && cfg.animation !== 'instant' && cfg.animation !== 'slide' && cfg.animation !== 'slide-up') {
-      const a = cfg.animation
-      if (a === 'fade' || a === 'slide-fade') anim.opacity = easeKeys(t[i], 0, 100, dur)
-      else if (a === 'slide-left' || a === 'slide-right') {
-        anim.opacity = linKeys(t[i], 0, 100, dur / 2)
-        anim.x = easeKeys(t[i], (a === 'slide-left' ? -W : W) * s, 0, dur)
-      } else if (a === 'pop') {
-        anim.opacity = linKeys(t[i], 0, 100, dur / 2.5)
-        const ks: Key[] = []
-        const steps = 6
-        for (let q = 0; q <= steps; q++) {
-          const x = q / steps
-          ks.push({ t: r3(t[i] + x * dur), v: r3((0.7 + 0.3 * easeOutBack(x)) * 100), interp: 'linear' })
-        }
-        anim.scale = ks
-      }
-    }
-    for (const k of Object.values(anim)) keyCount += k?.length ?? 0
+    keyCount += yKeys?.length ?? 0
     layerCount += layers.length + 1
     const who = m.user?.displayName ?? (m.notice ? m.notice.kind : 'system')
     const label = m.notice ? 10 : m.highlighted ? 4 : m.deletedAt !== undefined ? 1 : m.firstTime ? 3 : 8
@@ -719,7 +613,12 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
       localY: r3(C[i] * s),
       inT: r3(inT),
       outT: r3(outT),
-      anim,
+      t0: r3(t[i]),
+      hDel: r3((layoutsDel[i]?.height ?? h[i]) * s),
+      delAt: del[i] === Infinity ? 1e9 : r3(del[i]),
+      epochStart: epoch[i] === -Infinity ? -1e9 : r3(epoch[i]),
+      idx: idxInEpoch[i],
+      yKeys,
       deletedAtRel,
       layers,
     })
@@ -746,6 +645,8 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
     background,
     fadeTop: r3(cfg.fadeTopEdge * s),
     text: { shadow: style.textShadow, strokeWidth: r3(style.textOutline * 2 * s) },
+    anim: { style: ANIM_STYLE_INDEX[cfg.animation] ?? 2, ms: Math.max(1, cfg.animationMs), slidePx: r3(W * s) },
+    clears: clears.filter((c) => c > 0 && c <= durationSec),
     scroll,
     assets: writer.assets,
     messages,
