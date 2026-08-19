@@ -199,6 +199,11 @@ export function AEPanel({ cfg, set, patch, timeline, assets }: { cfg: Config; se
             ✓ <b>{result.compName}</b> — {result.messages} messages, {result.layers} layers in the main comp, {result.stats.keys} keyframes, {result.files} image files{result.reattached ? `, ${result.reattached} of your layers re-parented` : ''}. The comp is open in the viewer — select <b>TwitchSim Controls</b> (top layer) for the live controls.
           </p>
         )}
+        {result && result.groupedControls === false && (
+          <p className="hint">
+            The grouped <i>TwitchSim Controls</i> effect could not be applied, so the controls are the flat, prefixed sliders (Animation · / Layout · / Look ·) — same controls, no twirl-down groups. Everything still works; this only affects how they are arranged.
+          </p>
+        )}
         {result && result.textControls === false && (
           <p className="hint">
             The text colour / outline / shadow controls could not be wired up (After Effects refused to add layer styles). Open <i>Layer ▸ Layer Styles</i> once in this AE session and build again; opacity, background and top fade work regardless.
@@ -219,7 +224,7 @@ export function AEPanel({ cfg, set, patch, timeline, assets }: { cfg: Config; se
             <b>Main comp</b>: <i>TwitchSim Controls</i> (null, top layer — everything is parented to it: move / scale / rotate it to place the whole chat), <i>Chat area</i> (matte), one layer per message named <code>msg 012 · username</code>, <i>Scroll</i> (null — the stack's push-ups: hold keys + an expression) and <i>Background</i>.
           </li>
           <li>
-            <b>Effect Controls of the Controls null</b> (all keyframable, wired to the layers with expressions — no rebuild): <b>Animation ·</b> Style (dropdown: instant / slide up / slide up + fade / fade / slide from left / right / pop), Duration (frames), Ease out, Slide distance (% of the chat width), Pop from — every message reads them at the moment it arrives, so a keyframed Duration changes how <i>later</i> messages come in; <b>Layout ·</b> Row gap; <b>Look ·</b> Opacity, custom text & name colour, Outline, Shadow (+ softness / distance), Background colour / opacity / corners, Top fade (% of the chat height). Prefixes group them (AE has no folders in Effect Controls). Rebuilding keeps the null and everything you changed on it (values, keyframes, its transform); controls you never touched follow the panel's new settings.
+            <b>Effect Controls of the Controls null</b> — a single <b>TwitchSim Controls</b> effect with three collapsible groups (twirl them open, like Numbers+), all keyframable and wired to the layers with expressions (no rebuild): <b>Animation</b> — Style (dropdown: instant / slide up / slide up + fade / fade / slide from left / right / pop), Duration (frames), Ease out, Slide distance (% of chat width), Pop from (every message reads these at the moment it arrives, so a keyframed Duration changes how <i>later</i> messages come in); <b>Layout</b> — Row gap; <b>Look</b> — Opacity, custom text & name colour, Outline, a Shadow sub-group, a Background sub-group, Top fade. Rebuilding keeps the null and everything you changed on it (values, keyframes, its transform); controls you never touched follow the panel's new settings.
           </li>
           <li>
             <b>Pace of the chat</b> (messages per minute) is timing, not animation: change it in the panel and rebuild, or nest this comp and time-remap / time-stretch it.

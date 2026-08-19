@@ -37,6 +37,8 @@ export interface AEBuildResult {
   folder: string
   /** false when the layer styles behind the text controls (colour / outline / shadow) could not be added */
   textControls: boolean | null
+  /** false when the grouped "TwitchSim Controls" effect could not be applied (flat controls were used instead) */
+  groupedControls: boolean | null
   stats: SceneData['stats']
   files: number
   seconds: number
@@ -126,9 +128,11 @@ async function buildInAEInner(cfg: Config, timeline: Timeline, assets: AssetCach
   await yieldUI()
   // the animation preset that carries the text layer styles the Controls null drives
   const presetPath = posixPath(systemPath('extension')) + '/host/twitchsim-styles.ffx'
-  const begun = await callHost<{ total: number; assets: number }>('begin', { jsonPath, folder, presetPath })
+  // the grouped "TwitchSim Controls" pseudo effect (collapsible Animation / Layout / Look groups)
+  const controlsPresetPath = posixPath(systemPath('extension')) + '/host/twitchsim-controls.ffx'
+  const begun = await callHost<{ total: number; assets: number }>('begin', { jsonPath, folder, presetPath, controlsPresetPath })
   // from here on the project is being modified: whatever happens, run finish() so it is left consistent
-  let fin: { compName: string; layers: number; messages: number; reattached: number; folder: string; textControls: boolean | null }
+  let fin: { compName: string; layers: number; messages: number; reattached: number; folder: string; textControls: boolean | null; groupedControls: boolean | null }
   try {
     check()
     const batch = Math.max(1, opts.batch ?? 8)

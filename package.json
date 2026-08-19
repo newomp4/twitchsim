@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "make:controls-ffx": "node scripts/make-controls-ffx.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
