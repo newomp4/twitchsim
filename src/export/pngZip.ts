@@ -7,6 +7,8 @@ import { PngEncoderPool } from './pngPool'
 export async function exportPngZip(a: CommonExportArgs): Promise<ExportResult> {
   const { source, onProgress, signal, filename, mime, fileHandle } = a
   const total = source.totalFrames
+  // fflate's Zip has no ZIP64: the entry count is a 16-bit field
+  if (total > 65535) throw new Error(`This PNG sequence would have ${total.toLocaleString()} frames — more than a zip can hold (65 535). Shorten the clip, lower the frame rate, or export WebM / ProRes instead.`)
   const chunks: Uint8Array[] = []
   let bytes = 0
   let writable: FileSystemWritableFileStream | null = null

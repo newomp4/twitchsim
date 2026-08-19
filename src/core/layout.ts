@@ -624,7 +624,8 @@ function chatLineAtoms(msg: ChatMessage, env: LayoutEnv, fm: FontMetrics, delete
   atoms.push({ kind: 'group', atoms: group, w: gw, above: Math.max(...group.map((a) => ('above' in a ? a.above : 0))), below: Math.max(...group.map((a) => ('below' in a ? a.below : 0))) })
 
   const bodyColor = deleted ? c.deleted : msg.action ? color : msg.highlighted ? '#ffffff' : c.text
-  const bodyStyle: TextStyle = { font: fontString(400, fs, style.fontFamily), color: bodyColor, italic: deleted, role: 'body' }
+  // the AE "custom text colour" override recolours plain body text — not a deleted notice or a /me line (name-coloured)
+  const bodyStyle: TextStyle = { font: fontString(400, fs, style.fontFamily), color: bodyColor, italic: deleted, role: deleted || msg.action ? undefined : 'body' }
   if (!msg.action) {
     atoms.push({ kind: 'text', text: ':', w: measure(':', bodyStyle.font), style: { font: bodyStyle.font, color: msg.highlighted ? '#ffffff' : c.text, role: 'body' }, above, below })
   }

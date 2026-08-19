@@ -53,10 +53,18 @@ export function Slider({ label, value, min, max, step = 1, onChange, format, hin
         step={log ? 1 : step}
         value={dragPos ?? toPos(value)}
         aria-label={label}
+        aria-valuemin={min}
+        aria-valuemax={max}
+        aria-valuenow={value}
+        aria-valuetext={format ? format(value) : String(value)}
         onChange={(e) => {
           const p = parseFloat(e.target.value)
           if (log) setDragPos(p)
-          onChange(fromPos(p))
+          let next = fromPos(p)
+          // arrow keys move the log track by one position, which at the low end rounds back to the same
+          // value: then step by one unit in the pressed direction instead of doing nothing
+          if (log && next === value && p !== toPos(value)) next = Math.min(max, Math.max(min, value + (p > toPos(value) ? step : -step)))
+          onChange(next)
         }}
         onPointerUp={() => setDragPos(null)}
         onBlur={() => setDragPos(null)}

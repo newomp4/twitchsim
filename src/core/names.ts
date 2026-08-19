@@ -1,5 +1,15 @@
 import type { Rng } from './rng'
 
+/**
+ * A login for a display name: Twitch logins are lower-case ASCII, but a typed name in another script
+ * (たけし, Дмитрий, 김민수) keeps its letters — mapping every foreign letter to "_" would fold different
+ * people into one chatter (and print "(____)" behind their name).
+ */
+export function loginFor(name: string): string {
+  return name.toLowerCase().replace(/[^\p{L}\p{N}_]/gu, '_')
+}
+
+
 const ADJ = [
   'sneaky', 'silent', 'toxic', 'crispy', 'salty', 'spicy', 'lazy', 'sleepy', 'angry', 'happy', 'sad', 'tiny', 'giant',
   'dark', 'shadow', 'neon', 'cyber', 'pixel', 'retro', 'turbo', 'hyper', 'ultra', 'mega', 'super', 'epic', 'legendary',
@@ -180,6 +190,6 @@ export function parseCustomNames(text: string): GeneratedName[] {
     .map((s) => {
       const m = s.match(/^(.+?)\s*\((\S+)\)$/)
       if (m) return { displayName: m[1].trim(), login: m[2].toLowerCase() }
-      return { displayName: s, login: s.toLowerCase().replace(/[^a-z0-9_]/g, '_') }
+      return { displayName: s, login: loginFor(s) }
     })
 }

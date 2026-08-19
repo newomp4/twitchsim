@@ -118,7 +118,28 @@ export class AssetCache {
     }
   }
 
+  /** an export / AE build in progress: clear() waits until it is done (its bitmaps must stay alive) */
+  private holds = 0
+  private clearPending = false
+  hold(): () => void {
+    this.holds++
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      this.holds--
+      if (this.holds <= 0 && this.clearPending) {
+        this.clearPending = false
+        this.clear()
+      }
+    }
+  }
+
   clear(): void {
+    if (this.holds > 0) {
+      this.clearPending = true
+      return
+    }
     for (const img of this.cache.values()) {
       if (img.frames) for (const f of img.frames) f.bitmap.close?.()
       else if ('close' in img.bitmap && typeof (img.bitmap as ImageBitmap).close === 'function') (img.bitmap as ImageBitmap).close()

@@ -420,8 +420,8 @@ export const BOT_LINES = {
   replies: {
     '!drops': ['@{user} Drops are enabled for this stream! Watch to earn rewards.', '@{user} Drops: link your account at twitch.tv/drops/inventory'],
     '!lurk': ['@{user} thanks for the lurk! Enjoy the stream {e:love}', '@{user} is now lurking. Have a good one!'],
-    '!uptime': ['@{user} the stream has been live for {n} hours and {n} minutes.', '@{user} {streamer} has been live for {n}h {n}m.'],
-    '!followage': ['@{user} has been following {streamer} for {n} months and {n} days.', '@{user} has been following for {n} years and {n} months.'],
+    '!uptime': ['@{user} the stream has been live for {h} hours and {m} minutes.', '@{user} {streamer} has been live for {h}h {m}m.'],
+    '!followage': ['@{user} has been following {streamer} for {mo} months and {d} days.', '@{user} has been following for {y} years and {mo} months.'],
     '!socials': ['Follow {streamer} everywhere: twitter.com/{login} | youtube.com/@{login} | discord.gg/{login}'],
     '!discord': ['Join the Discord: discord.gg/{login}'],
     '!commands': ['@{user} commands: !discord !socials !drops !lurk !uptime !followage !song !rank !schedule !prime'],

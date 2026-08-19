@@ -48,7 +48,23 @@ export async function exportProRes(a: CommonExportArgs): Promise<ExportResult> {
   const { source, onProgress, signal, filename, mime, fileHandle } = a
   const total = source.totalFrames
   const fps = source.fps
-  const ff = await getFFmpeg((s) => onProgress({ phase: 'preparing', frame: 0, totalFrames: total, percent: 0, message: s }))
+  // Cancel must work while the engine (32 MB) downloads: race the load against the abort signal (the
+  // download itself keeps going in the background and lands in the cache for next time)
+  const ff = await new Promise<FFmpeg>((resolve, reject) => {
+    if (signal.aborted) return reject(new DOMException('cancelled', 'AbortError'))
+    const onAbortEarly = () => reject(new DOMException('cancelled', 'AbortError'))
+    signal.addEventListener('abort', onAbortEarly, { once: true })
+    getFFmpeg((s) => onProgress({ phase: 'preparing', frame: 0, totalFrames: total, percent: 0, message: s })).then(
+      (f) => {
+        signal.removeEventListener('abort', onAbortEarly)
+        resolve(f)
+      },
+      (e) => {
+        signal.removeEventListener('abort', onAbortEarly)
+        reject(e)
+      },
+    )
+  })
   if (signal.aborted) throw new DOMException('cancelled', 'AbortError')
 
   let writable: FileSystemWritableFileStream | null = null
@@ -102,6 +118,10 @@ export async function exportProRes(a: CommonExportArgs): Promise<ExportResult> {
       const code = await ff.exec([
         '-framerate', String(fps),
         '-i', `${dir}/f_%05d.png`,
+        // RGB→YCbCr with the Rec.709 matrix and tagged as such (untagged ProRes is read as 709 by every NLE;
+        // swscale's default would be 601 → visible colour shift on saturated colours)
+        '-vf', 'scale=out_color_matrix=bt709:out_range=tv',
+        '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709',
         '-c:v', 'prores_ks', '-profile:v', '4444', '-pix_fmt', 'yuva444p10le', '-vendor', 'apl0', '-bits_per_mb', '8000',
         '-threads', '1',
         outName,
@@ -130,19 +150,22 @@ export async function exportProRes(a: CommonExportArgs): Promise<ExportResult> {
     packetSource.close()
     onProgress({ phase: 'finalizing', frame: total, totalFrames: total, percent: 100, message: 'Finalizing .mov…' })
     await output.finalize()
-    if (writable) return { filename, mime, savedToDisk: true, bytes: 0 }
+    if (guarded) {
+      await guarded.commit() // only a fully finalized file replaces the one the user picked
+      return { filename, mime, savedToDisk: true, bytes: 0 }
+    }
     const buf = (target as BufferTarget).buffer!
     const blob = new Blob([buf], { type: mime })
     return { blob, filename, mime, savedToDisk: false, bytes: blob.size }
   } catch (err) {
     // terminate() rejects the in-flight ffmpeg call with its own Error: report the cancel as a cancel
     const e = signal.aborted ? new DOMException('cancelled', 'AbortError') : err
-    if (guarded) guarded.guard.ok = false // discard the partial file instead of committing it
     try {
       await output.cancel()
     } catch {
       /* ignore */
     }
+    if (guarded) await guarded.discard() // the partial swap file goes; the picked file stays as it was
     if (!signal.aborted) {
       // a failed exec leaves the wasm instance in an unknown state (mounted dirs, OOM): start fresh next time
       try {

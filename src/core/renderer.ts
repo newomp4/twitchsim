@@ -136,16 +136,19 @@ export class ChatRenderer {
       ctx.rect(0, 0, W, H)
       ctx.clip()
     }
-    if (bg) {
+    // (the panel colour is painted *under* the rows at the end — see the top fade — so a fade never
+    // thins the panel itself; a canvas that already has content beneath the chat is not touched either)
+    const fadeH = o.fadeTopEdge > 0 ? Math.min(H, o.fadeTopEdge) : 0
+    if (bg && fadeH <= 0) {
       ctx.fillStyle = bg
       ctx.fillRect(0, 0, W, H)
     }
 
     // visible window
     const msgs = tl.messages
-    let hi = upperBound(msgs, tMs) // first index with t > tMs
+    let hi = upperBound(msgs, tMs + 1e-6) // first index with t > tMs (+ε: an arrival exactly on a frame is on that frame)
     let clearT = -Infinity
-    for (const c of tl.clears) if (c <= tMs) clearT = c
+    for (const c of tl.clears) if (c <= tMs + 1e-6) clearT = c
     let yBottom = H - s.paddingBottom
     const animMs = Math.max(1, o.animationMs)
     // draw newest first (bottom) going up
@@ -177,25 +180,23 @@ export class ChatRenderer {
       } else this.drawRow(ctx, d.layout, 0, d.y, W, a.alpha, tMs, o)
     }
 
-    // top fade
-    if (o.fadeTopEdge > 0) {
-      const fh = Math.min(H, o.fadeTopEdge)
-      // fade the content out first, then (if the panel has a background) fade the panel color back in —
-      // this way a semi-transparent custom background keeps its own alpha in the strip
+    // top fade: the rows were drawn onto a clean layer, so erasing them with destination-out fades exactly
+    // the content; the panel colour then goes underneath (destination-over) at its full, unchanged alpha
+    if (fadeH > 0) {
       ctx.save()
       ctx.globalCompositeOperation = 'destination-out'
-      const cut = ctx.createLinearGradient(0, 0, 0, fh)
+      const cut = ctx.createLinearGradient(0, 0, 0, fadeH)
       cut.addColorStop(0, 'rgba(0,0,0,1)')
       cut.addColorStop(1, 'rgba(0,0,0,0)')
       ctx.fillStyle = cut
-      ctx.fillRect(0, 0, W, fh)
+      ctx.fillRect(0, 0, W, fadeH)
       ctx.restore()
       if (bg) {
-        const grad = ctx.createLinearGradient(0, 0, 0, fh)
-        grad.addColorStop(0, bg)
-        grad.addColorStop(1, transparentize(bg))
-        ctx.fillStyle = grad
-        ctx.fillRect(0, 0, W, fh)
+        ctx.save()
+        ctx.globalCompositeOperation = 'destination-over'
+        ctx.fillStyle = bg
+        ctx.fillRect(0, 0, W, H)
+        ctx.restore()
       }
     }
     ctx.restore()
@@ -390,17 +391,6 @@ function upperBound(msgs: ChatMessage[], t: number): number {
   return lo
 }
 
-function transparentize(color: string): string {
-  if (color.startsWith('rgba')) return color.replace(/,\s*[\d.]+\)$/, ',0)')
-  if (color.startsWith('rgb(')) return color.replace('rgb(', 'rgba(').replace(')', ',0)')
-  if (color.startsWith('#')) {
-    let h = color.slice(1)
-    if (h.length === 3) h = h.split('').map((c) => c + c).join('')
-    const n = parseInt(h.slice(0, 6), 16)
-    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},0)`
-  }
-  return 'rgba(0,0,0,0)'
-}
 
 /** Power-up "message effects" backgrounds (approximations of Twitch's animated effects). */
 export function drawEffect(ctx: Ctx2D, effect: NonNullable<ChatMessage['effect']>, x: number, y: number, w: number, h: number, tMs: number): void {
@@ -476,6 +466,7 @@ export function collectAssetUrls(tl: Timeline, hiRes: boolean, style: RenderStyl
       if (f.kind === 'emote' || f.kind === 'cheer') {
         urls.add(hiRes ? f.url4x : f.url)
         if (hiRes) urls.add(f.url) // the 1× fallback the renderer switches to if the 4× file is missing
+        if (m.gigantified && f.kind === 'emote') urls.add(f.url4x) // a giant emote always draws the 4× file
       }
     }
   }

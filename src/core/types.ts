@@ -89,6 +89,8 @@ export interface ChatMessage {
   badges?: Badge[]
   /** the author's name color at the time of the message */
   color?: string | null
+  /** metronomic pacing: this row was placed deliberately (@N, +N, after !wait) — keep its time */
+  pinned?: boolean
   /** metronomic pacing: keep at least this many ms between the previous message and this one (!wait, +N) */
   minGapBefore?: number
   fragments: Fragment[]

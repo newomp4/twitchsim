@@ -140,7 +140,7 @@ export function Preview({ cfg, timeline, assets, player, zoom, fontsVersion = 0 
       ctx.setTransform(1, 0, 0, 1, 0, 0)
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       ctx.scale(pxScale, pxScale)
-      renderer.render(ctx, timeline, t, { style, animation: cfg.animation, animationMs: cfg.animationMs, fadeTopEdge: cfg.fadeTopEdge, hiRes: pxScale > 1.25 })
+      renderer.render(ctx, timeline, t, { style, animation: cfg.animation, animationMs: cfg.animationMs, fadeTopEdge: cfg.fadeTopEdge, hiRes: pxScale * (cfg.fontScale ?? 1) > 1.25 })
     }
     const unsub = subscribe(draw)
     draw()
@@ -150,7 +150,7 @@ export function Preview({ cfg, timeline, assets, player, zoom, fontsVersion = 0 
   const geo = computeGeometry(cfg)
   return (
     <div className="preview-wrap" ref={wrapRef}>
-      <div className={'preview-stage' + (style.transparent ? ' checker' : '')} style={{ width: cfg.width * zoomScale, height: cfg.height * zoomScale }}>
+      <div className={'preview-stage' + (style.transparent || (cfg.chatStyle === 'custom' && cfg.bgOpacity < 1) ? ' checker' : '')} style={{ width: cfg.width * zoomScale, height: cfg.height * zoomScale }}>
         <canvas ref={canvasRef} style={{ width: cfg.width * zoomScale, height: cfg.height * zoomScale }} />
       </div>
       <div className="preview-meta">

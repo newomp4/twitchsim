@@ -42,16 +42,37 @@ export function formatBytes(n: number): string {
 }
 
 /**
- * A WritableStream over a FileSystemWritableFileStream whose `close()` commits the file only when
- * `guard.ok` is still true; otherwise it aborts, discarding the partial swap file (so a cancelled or
- * failed export never overwrites the file the user picked with a truncated one).
+ * A WritableStream over a FileSystemWritableFileStream that never commits on its own: the muxer may
+ * close the stream from a `finally` even when finalizing failed, so committing (which is what makes the
+ * file the user picked actually change) is an explicit `commit()`; `discard()` throws the partial swap
+ * file away. A cancelled or failed export therefore never overwrites the picked file with a truncated one.
  */
-export function guardedWritable(writable: FileSystemWritableFileStream): { stream: WritableStream<{ type: 'write'; data: Uint8Array<ArrayBuffer>; position: number } | Uint8Array<ArrayBuffer>>; guard: { ok: boolean } } {
-  const guard = { ok: true }
+export function guardedWritable(writable: FileSystemWritableFileStream): { stream: WritableStream<{ type: 'write'; data: Uint8Array<ArrayBuffer>; position: number } | Uint8Array<ArrayBuffer>>; commit: () => Promise<void>; discard: () => Promise<void> } {
+  let done = false
   const stream = new WritableStream<{ type: 'write'; data: Uint8Array<ArrayBuffer>; position: number } | Uint8Array<ArrayBuffer>>({
     write: (chunk) => writable.write(chunk as FileSystemWriteChunkType),
-    close: () => (guard.ok ? writable.close() : writable.abort()),
-    abort: (reason) => writable.abort(reason),
+    close: () => {
+      /* committed explicitly via commit() */
+    },
+    abort: () => {
+      /* discarded explicitly via discard() */
+    },
   })
-  return { stream, guard }
+  return {
+    stream,
+    commit: async () => {
+      if (done) return
+      done = true
+      await writable.close()
+    },
+    discard: async () => {
+      if (done) return
+      done = true
+      try {
+        await writable.abort()
+      } catch {
+        /* already closed */
+      }
+    },
+  }
 }

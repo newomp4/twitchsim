@@ -164,5 +164,11 @@ export function pickFolder(title: string, initial: string): string | null {
 
 export function revealPath(path: string): void {
   const p = posixPath(path)
-  window.cep?.util.openURLInDefaultBrowser('file:///' + encodeURI(p.replace(/^\//, '')))
+  // per-segment encoding: a folder called "Q&A #1" must not turn into a query / fragment
+  const enc = p
+    .replace(/^\//, '')
+    .split('/')
+    .map((seg) => (/^[A-Za-z]:$/.test(seg) ? seg : encodeURIComponent(seg)))
+    .join('/')
+  window.cep?.util.openURLInDefaultBrowser('file:///' + enc)
 }

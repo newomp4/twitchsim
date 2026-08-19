@@ -32,9 +32,11 @@ export function CustomIcons({ cfg, set, patch }: { cfg: Config; set: <K extends 
       for (const f of Array.from(files)) {
         const extra: Partial<CustomBadge> = {}
         if (kind === 'sub') {
-          // "sub-12.png" / "12 months.png" style names set the tier automatically
-          const m = f.name.match(/(\d+)/)
-          const months = m ? parseInt(m[1], 10) : nextTier
+          // "sub-12.png" / "12 months.png" / "12.png" style names set the tier automatically (a number of
+          // its own, 1–3 digits — not the 4521 of IMG_4521.png or the 2 of badge@2x)
+          const m = f.name.match(/(?:^|[-_ ])(\d{1,3})(?=[-_ .]|month|$)/i)
+          const parsed = m ? parseInt(m[1], 10) : NaN
+          const months = parsed >= 1 && parsed <= 999 ? parsed : nextTier
           extra.months = months
           extra.name = `${months}-Month Subscriber`
           nextTier = SUB_TIER_DEFAULTS.find((x) => x > months && !subs.some((b) => b.months === x)) ?? months + 12

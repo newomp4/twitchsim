@@ -4,7 +4,7 @@ import { ChatRenderer, collectAssetUrls } from '../core/renderer'
 import type { AssetCache } from '../core/assets'
 import { styleFromConfig } from '../core/layout'
 import { FRAME_PRESETS } from '../core/defaults'
-import { ensureFonts } from '../core/fonts'
+import { ensureFonts, timelineText } from '../core/fonts'
 import { exportPngZip } from './pngZip'
 import { exportWithMediabunny } from './mediabunnyExport'
 import { exportProRes } from './ffmpegExport'
@@ -89,10 +89,6 @@ export function makeFrameSource(cfg: Config, tl: Timeline, assets: AssetCache): 
     const t = (i / fps) * 1000
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, geometry.outW, geometry.outH)
-    if (!transparent) {
-      ctx.fillStyle = cfg.exportBg
-      ctx.fillRect(0, 0, geometry.outW, geometry.outH)
-    }
     ctx.translate(geometry.chatX, geometry.chatY)
     ctx.scale(geometry.scale, geometry.scale)
     renderer.render(ctx, tl, t, {
@@ -100,9 +96,18 @@ export function makeFrameSource(cfg: Config, tl: Timeline, assets: AssetCache): 
       animation: cfg.animation,
       animationMs: cfg.animationMs,
       fadeTopEdge: cfg.fadeTopEdge,
-      hiRes: geometry.scale > 1.25,
+      hiRes: geometry.scale * (cfg.fontScale ?? 1) > 1.25,
       forceBg: style.transparent && !transparent ? null : undefined,
     })
+    if (!transparent) {
+      // the frame colour goes *under* the chat afterwards: the top fade erases what is already on the
+      // canvas, and it must never eat the frame background
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.globalCompositeOperation = 'destination-over'
+      ctx.fillStyle = cfg.exportBg
+      ctx.fillRect(0, 0, geometry.outW, geometry.outH)
+      ctx.globalCompositeOperation = 'source-over'
+    }
   }
   return { canvas, totalFrames, fps, render, geometry, transparent }
 }
@@ -149,9 +154,18 @@ export function mimeFor(f: Config['exportFormat']): string {
 }
 
 export async function runExport(p: ExportParams): Promise<ExportResult> {
+  const release = p.assets.hold() // flipping "animated emotes" mid-export must not close our bitmaps
+  try {
+    return await runExportInner(p)
+  } finally {
+    release()
+  }
+}
+
+async function runExportInner(p: ExportParams): Promise<ExportResult> {
   const { config: cfg, timeline: tl, assets, onProgress, signal } = p
   onProgress({ phase: 'preparing', frame: 0, totalFrames: 0, percent: 0, message: 'Loading fonts…' })
-  await ensureFonts(cfg.fontFamily)
+  await ensureFonts(cfg.fontFamily, timelineText(tl))
   const style = styleFromConfig(cfg)
   const geometry = computeGeometry(cfg)
   const urls = collectAssetUrls(tl, geometry.scale > 1.25, style)

@@ -63,4 +63,5 @@ The app also accepts JSON with users (colors, badges) and typed events. This is 
 - `at` (absolute seconds) or `delay` (seconds after the previous line) are optional on every message; without them lines are paced by the chat speed setting.
 - `user`: a name from `users`, any new name (created on the fly), or `*` / omitted for a random viewer.
 - Badge flags: `mod`, `vip`, `sub:<months>`, `prime`, `turbo`, `founder`, `bits:<total>`, `gifter:<count>`, `partner`, `broadcaster`.
+- Every chat-like entry (`chat`, `highlight`, `first`, `me`, `delete`, `reply`, `reward`, `effect`, `gigantify`) needs a non-empty `text`; `announce` colours are `purple`, `blue`, `green`, `orange`, `red` or a hex.
 - The same file can also be plain script lines (see the Help tab) — the app detects JSON automatically.

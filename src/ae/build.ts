@@ -4,7 +4,7 @@ import type { Timeline } from '../core/simulation'
 import type { AssetCache } from '../core/assets'
 import { collectAssetUrls } from '../core/renderer'
 import { styleFromConfig } from '../core/layout'
-import { ensureFonts } from '../core/fonts'
+import { ensureFonts, timelineText } from '../core/fonts'
 import { compileScene, type SceneData } from './scene'
 import { callHost, mkdirp, writeBase64, writeText, posixPath, jsonForES3, systemPath } from './cep'
 
@@ -69,13 +69,22 @@ export function buildKeyFor(compName: string): string {
 const yieldUI = () => new Promise<void>((r) => setTimeout(r, 0))
 
 export async function buildInAE(cfg: Config, timeline: Timeline, assets: AssetCache, opts: AEBuildOptions, onProgress: (p: AEProgress) => void): Promise<AEBuildResult> {
+  const release = assets.hold() // flipping "animated emotes" mid-build must not close our bitmaps
+  try {
+    return await buildInAEInner(cfg, timeline, assets, opts, onProgress)
+  } finally {
+    release()
+  }
+}
+
+async function buildInAEInner(cfg: Config, timeline: Timeline, assets: AssetCache, opts: AEBuildOptions, onProgress: (p: AEProgress) => void): Promise<AEBuildResult> {
   const t0 = performance.now()
   const check = () => {
     if (opts.signal?.aborted) throw new DOMException('Cancelled', 'AbortError')
   }
   const style = styleFromConfig(cfg)
   onProgress({ phase: 'assets', done: 0, total: 1, message: 'Loading badges & emotes…' })
-  await ensureFonts(cfg.fontFamily || 'Inter')
+  await ensureFonts(cfg.fontFamily || 'Inter', timelineText(timeline))
   const urls = collectAssetUrls(timeline, true, style)
   await assets.loadAll(urls, (d, t) => onProgress({ phase: 'assets', done: d, total: t, message: `Loading badges & emotes… ${d}/${t}` }))
   check()

@@ -62,22 +62,27 @@ xX_shadow_Xx: no way`}</pre>
         <p className="hint">Everything here is optional. Plain lines already give you a realistic chat.</p>
         <pre className="help cols">{`@12.5 text                     at 12.5 s (absolute time)
 +0.4 text                      0.4 s after the previous line
-!user name [mod sub:12 color:#ff69b4]   define a user's badges/color up-front
+!wait 3                        pause 3 s
+!user name [mod sub:12 color:#ff69b4]   define a user's badges/color (before the first line = from the start)
 [sub:12 prime] user: text      [sub:N] months, [prime] [turbo] [partner] [bits:1000] [gifter:5] [color:#hex] [broadcaster]
+*: text                        a random viewer says exactly this (text starting with ! # + @ [ or "word:")
 
-!sub user [prime|t1|t2|t3] [months] [-- message]
+!sub user [prime|t1|t2|t3] [months] [-- message]      a bare number = months
 !gift gifter recipient          !gifts gifter 10        community gift bomb
 !raid raider 250                !announce [purple|blue|green|orange] text
 !cheer user 500 text            !highlight [user:] text
 !first [user:] text             !reply target: text
 !me [user:] text                !delete [user:] text
-!burst 20 KEKW                  20 users spam this at once
-!clear  !slow 5  !emoteonly  !system text  !speed 2  !mod user  !vip user
-!reward Name | user: text        !timeout user 600     !unmod user   !color user #hex
+!burst 20 KEKW                  20 users spam this at once (!burst KEKW = 10)
+!timeout user 600               !ban user (for good)      earlier lines get "message deleted"
+!clear  !slow 5  !emoteonly  !system text  !mod user  !vip user
+!speed 2                       twice the pace from here on (filler + gaps between your lines)
+!reward Name | user: text        !unmod user   !color user #hex
 !gigantify user: text KEKW      !effect rainbow-eclipse|simmer|cosmic-abyss user: text
 !slowoff  !emoteonlyoff  !followers 10  !subsonly
 
-{e} random emote · {e:laugh|hype|sad|scared|clap|love|jam|wave} · {streamer} · {game}`}</pre>
+{e} random emote · {e:laugh|hype|sad|scared|clap|love|jam|wave} · {streamer} · {game}
+# comment  // comment  and code fences are ignored; a leading [ ... ] is read as flags`}</pre>
         <p className="hint">You can also paste a JSON file (users + messages + events); see docs/AI_PROMPT.md in the repo for the schema.</p>
         <Collapsible title="Example JSON">
           <pre className="help">{EXAMPLE_JSON}</pre>
@@ -106,7 +111,7 @@ xX_shadow_Xx: no way`}</pre>
 
       <Section title="After Effects panel">
         <p className="hint">
-          TwitchSim also runs <b>inside After Effects</b> (Window ▸ Extensions ▸ TwitchSim) and builds the chat as real AE layers — one precomp per message you can parent things to, text & shape layers, badge/emote footage and a single keyframed "Scroll" null.
+          TwitchSim also runs <b>inside After Effects</b> (Window ▸ Extensions ▸ TwitchSim) and builds the chat as real AE layers — one precomp per message you can parent things to, text & shape layers, badge/emote footage, and a "TwitchSim Controls" null whose Effect Controls drive the animation, spacing and look live (expressions, keyframable).
           Install: clone the repo, <code>npm install</code>, <code>npm run cep:install</code>, restart AE. Details in the README.
         </p>
       </Section>

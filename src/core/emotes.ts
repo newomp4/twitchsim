@@ -205,7 +205,7 @@ export function parseMessage(text: string, opts: ParseOptions): { fragments: Fra
       continue
     }
     if (tok.length > 1 && tok.startsWith('@')) {
-      const login = tok.slice(1).replace(/[^\w]+$/, '')
+      const login = tok.slice(1).replace(/[^\p{L}\p{N}_]+$/u, '') // "@たけし," → たけし
       if (login) {
         flush()
         const trailing = tok.slice(1 + login.length)

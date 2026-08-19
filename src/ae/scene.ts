@@ -165,9 +165,10 @@ interface FontSpec {
 }
 
 function parseFont(font: string): FontSpec {
-  const m = font.match(/^(italic\s+)?(\d+)\s+([\d.]+)px\s+"([^"]+)"/)
+  // `fontString()` quotes real family names and leaves generic ones (system-ui, sans-serif…) bare
+  const m = font.match(/^(italic\s+)?(\d+)\s+([\d.]+)px\s+(?:"([^"]+)"|([^,]+))/)
   if (!m) return { family: 'Inter', weight: 400, italic: false, size: 14 }
-  return { family: m[4], weight: parseInt(m[2], 10), italic: !!m[1], size: parseFloat(m[3]) }
+  return { family: (m[4] ?? m[5]).trim(), weight: parseInt(m[2], 10), italic: !!m[1], size: parseFloat(m[3]) }
 }
 
 function hashStr(s: string): string {
@@ -235,6 +236,11 @@ class AssetWriter {
       for (let j = 0; j < n; j++) {
         const src = frameAt(img, (j / seqFps) * 1000 + 0.01)
         const { c, ctx } = this.canvas(w, h)
+        if (round && round > 0) {
+          ctx.beginPath()
+          ctx.roundRect(0, 0, w, h, Math.min(w, h) * Math.min(0.5, round))
+          ctx.clip()
+        }
         ctx.drawImage(src, 0, 0, w, h)
         this.files.push({ path: `${folder}/f_${String(j).padStart(5, '0')}.png`, base64: this.toBase64(c) })
       }
@@ -426,7 +432,7 @@ function emitRow(L: RowLayout, ctx: RowCtx, state?: 'normal' | 'deleted', effect
           if (!asset) continue
           let dw = a.w
           let dh = a.h
-          if ((a.role === 'emote' || a.role === 'cheer') && a.w === a.h) {
+          if (a.role === 'emote' && a.w === a.h) {
             const aspect = asset.w / asset.h
             const box = Math.max(a.w, a.h)
             if (aspect >= 1) {
@@ -471,8 +477,9 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
   const rowCtx: RowCtx = { style, s, writer, W }
   const msgs = tl.messages
   const N = msgs.length
-  // all times are rounded to 0.1 ms so event boundaries compare exactly
-  const rt = (x: number) => Math.round(x * 10000) / 10000
+  // times stay exact (seconds): every comparison below pairs numbers derived from the same source, and the
+  // expressions in AE compare the same values again — rounding would only introduce disagreements
+  const rt = (x: number) => x
   const clears = [...tl.clears].sort((a, b) => a - b).map((c) => rt(c / 1000))
 
   // ---- per-message timing / geometry ----
@@ -549,6 +556,7 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
     const inT = Math.max(0, t[i])
     if (inT >= durationSec) continue // generated past the end of the comp: never visible
     if (hiddenAt[i] <= inT) continue // wiped by a /clear before it could ever show
+    if (hiddenAt[i] - inT < frameDur * 0.999) continue // no frame in which it would be seen (AE layers span whole frames)
     const hMax = Math.max(h[i], layoutsDel[i]?.height ?? 0)
     // out point: the row's *last* exit above the top edge (the stack can shrink again when a newer row's
     // "deleted" layout is shorter — the canvas slides everything back down), or the clear that hides it.
@@ -569,7 +577,9 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
           if (above === null) above = keyTimes[j]
         } else above = null
       }
-      if (above !== null) outT = Math.min(outT, above + Math.max(3, 4 * dur))
+      // 6 s: the live Duration control is clamped to that in the expressions, so the growth can delay an exit
+      // by at most that much
+      if (above !== null) outT = Math.min(outT, above + Math.max(6, 4 * dur))
     }
     if (outT <= inT) outT = Math.min(durationSec, inT + frameDur)
     const layerStart = inT
@@ -577,7 +587,7 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
     let layers: MsgLayer[]
     let deletedAtRel: number | undefined
     if (layoutsDel[i]) {
-      deletedAtRel = r3(del[i] - layerStart)
+      deletedAtRel = del[i] - layerStart
       layers = [...emitRow(L, rowCtx, 'normal', m.t), ...emitRow(layoutsDel[i]!, rowCtx, 'deleted', m.t)]
     } else layers = emitRow(L, rowCtx, undefined, m.t)
     // Local Y (row centre) inside the scroll null: C[i], jumping when an older row is deleted while this
@@ -611,12 +621,13 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
       compW: Math.max(4, Math.ceil(W * s)),
       compH: Math.max(4, Math.ceil(hMax * s + 0.5)),
       localY: r3(C[i] * s),
-      inT: r3(inT),
-      outT: r3(outT),
-      t0: r3(t[i]),
+      inT,
+      outT,
+      // times the expressions compare with each other and with `clears` keep the same (0.1 ms) quantization
+      t0: t[i],
       hDel: r3((layoutsDel[i]?.height ?? h[i]) * s),
-      delAt: del[i] === Infinity ? 1e9 : r3(del[i]),
-      epochStart: epoch[i] === -Infinity ? -1e9 : r3(epoch[i]),
+      delAt: del[i] === Infinity ? 1e9 : del[i],
+      epochStart: epoch[i] === -Infinity ? -1e9 : epoch[i],
       idx: idxInEpoch[i],
       yKeys,
       deletedAtRel,

@@ -10,17 +10,24 @@ function devSavePlugin(): Plugin {
     apply: 'serve',
     configureServer(server) {
       if (!process.env.TWITCHSIM_DEV_SAVE) return
-      server.middlewares.use('/__twitchsim_save', (req, res) => {
+      server.middlewares.use('/__twitchsim_save', (req, res, next) => {
+        if (req.method !== 'POST') return next()
         const url = new URL(req.url ?? '/', 'http://localhost')
-        const name = (url.searchParams.get('name') ?? 'export.bin').replace(/[^a-z0-9._-]/gi, '_')
+        let name = (url.searchParams.get('name') ?? 'export.bin').replace(/[^a-z0-9._-]/gi, '_')
+        if (!name || name === '.' || name === '..') name = 'export.bin'
         const chunks: Buffer[] = []
         req.on('data', (c: Buffer) => chunks.push(c))
         req.on('end', () => {
-          const dir = join(process.cwd(), '.dev-exports')
-          mkdirSync(dir, { recursive: true })
-          writeFileSync(join(dir, name), Buffer.concat(chunks))
-          res.statusCode = 200
-          res.end('ok')
+          try {
+            const dir = join(process.cwd(), '.dev-exports')
+            mkdirSync(dir, { recursive: true })
+            writeFileSync(join(dir, name), Buffer.concat(chunks))
+            res.statusCode = 200
+            res.end('ok')
+          } catch (e) {
+            res.statusCode = 500
+            res.end(String((e as Error).message))
+          }
         })
       })
     },

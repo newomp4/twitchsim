@@ -6,14 +6,21 @@ import { invalidateFontCaches } from './layout'
 
 let loaded: Promise<void> | null = null
 
-/** Makes sure Inter (Twitch's chat font) is available to the canvas before drawing. */
-export function ensureFonts(family = 'Inter'): Promise<void> {
-  if (loaded && family === 'Inter') return loaded
+/**
+ * Makes sure Inter (Twitch's chat font) is available to the canvas before drawing.
+ * `text`: the characters that will be drawn — the bundled Inter comes in unicode-range subsets (latin,
+ * latin-ext, cyrillic, greek, vietnamese…) and `document.fonts.load()` only fetches the ones the sample
+ * text needs; without it Cyrillic names would be measured with a stand-in font and re-drawn in Inter
+ * once the subset arrives mid-export.
+ */
+export function ensureFonts(family = 'Inter', text?: string): Promise<void> {
+  const sample = text ? distinctChars(text) : ''
+  if (loaded && family === 'Inter' && !sample) return loaded
   const p = (async () => {
     if (typeof document === 'undefined' || !document.fonts) return
     const weights = [400, 500, 600, 700]
     const specs = weights.flatMap((w) => [`${w} 14px "${family}"`, `italic ${w} 14px "${family}"`])
-    const loadAll = async () => (await Promise.all(specs.map((s) => document.fonts.load(s).catch(() => [] as FontFace[])))).reduce((n, faces) => n + faces.length, 0)
+    const loadAll = async () => (await Promise.all(specs.map((s) => document.fonts.load(s, sample || undefined).catch(() => [] as FontFace[])))).reduce((n, faces) => n + faces.length, 0)
     let n = await loadAll()
     // Cold start: the stylesheet that declares the bundled Inter faces may not be applied yet when the
     // script runs (the panel loads it after the script; a first visit fetches it) — load() then finds no
@@ -27,8 +34,31 @@ export function ensureFonts(family = 'Inter'): Promise<void> {
     }
     invalidateFontCaches()
   })()
-  if (family === 'Inter') loaded = p
+  if (family === 'Inter' && !sample) loaded = p
   return p
+}
+
+/** the distinct characters of a text (capped — the sample only has to touch every unicode subset) */
+function distinctChars(text: string): string {
+  const seen = new Set<string>()
+  for (const ch of text) {
+    if (ch.charCodeAt(0) < 128) continue // latin is always loaded
+    seen.add(ch)
+    if (seen.size > 400) break
+  }
+  return ' ' + [...seen].join('')
+}
+
+/** every character a timeline can draw: names, message text, notice text */
+export function timelineText(tl: { messages: { text?: string; user?: { displayName: string } | undefined; notice?: { parts: { text: string }[] } | undefined; reply?: { displayName: string; text: string } }[] }): string {
+  const out: string[] = []
+  for (const m of tl.messages) {
+    if (m.user) out.push(m.user.displayName)
+    if (m.text) out.push(m.text)
+    if (m.notice) for (const p of m.notice.parts) out.push(p.text)
+    if (m.reply) out.push(m.reply.displayName, m.reply.text)
+  }
+  return out.join('')
 }
 
 /**

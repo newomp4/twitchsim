@@ -44,6 +44,8 @@ export interface UserFlags {
   bits?: number
   gifter?: number
   color?: string
+  /** subMonths is the exact new count (a sub notice), not a floor (a bare [sub] tag) */
+  exactSubMonths?: boolean
 }
 
 export type ScriptEntry =
@@ -96,11 +98,18 @@ function parseFlags(src: string): { flags: UserFlags; rest: string } {
   return { flags, rest }
 }
 
-/** "name: text" -> {user, text}; otherwise {text} */
+/** "name: text" -> {user, text}; "*: text" -> a random viewer says text (escape for text that would parse as a command); otherwise {text} */
 function splitUser(src: string): { user?: string; text: string } {
-  const m = src.match(/^([A-Za-z0-9_][A-Za-z0-9_\-. ()À-￿]{0,40}?):\s+(.*)$/s)
-  if (m && !m[1].includes(' ') && !/^https?$/i.test(m[1])) return { user: m[1], text: m[2] }
+  const star = src.match(/^\*:\s+(.*)$/s)
+  if (star) return { text: star[1] }
+  const m = src.match(/^([\p{L}\p{N}_][\p{L}\p{N}\p{M}_\-.()]{0,40}?):\s+(.*)$/su)
+  if (m && !/^https?$/i.test(m[1])) return { user: m[1], text: m[2] }
   return { text: src }
+}
+
+/** an `@` / `+` timing; clamped to a day so a stray digit cannot freeze the tab */
+function clampSec(v: number): number {
+  return Number.isFinite(v) ? Math.max(0, Math.min(86400, v)) : 0
 }
 
 /** "#ff0000" / "ff0000" / "#f00" → "#rrggbb", or undefined when it isn't a colour */
@@ -112,13 +121,14 @@ export function normalizeHex(v?: string): string | undefined {
   return '#' + h.toLowerCase()
 }
 
+/** "prime" / "t1" / "tier2" … — a bare number is a month count, never a tier */
 function parseTier(s?: string): 'prime' | 1 | 2 | 3 | undefined {
   if (!s) return undefined
   const t = s.toLowerCase()
   if (t === 'prime') return 'prime'
-  if (t === 't1' || t === '1' || t === 'tier1') return 1
-  if (t === 't2' || t === '2' || t === 'tier2') return 2
-  if (t === 't3' || t === '3' || t === 'tier3') return 3
+  if (t === 't1' || t === 'tier1') return 1
+  if (t === 't2' || t === 'tier2') return 2
+  if (t === 't3' || t === 'tier3') return 3
   return undefined
 }
 
@@ -133,10 +143,10 @@ export function parseScript(srcRaw: string): ScriptEntry[] {
     let timing: ScriptTiming = { kind: 'auto' }
     let m = line.match(/^@(\d+(?:\.\d+)?)\s+/)
     if (m) {
-      timing = { kind: 'at', sec: parseFloat(m[1]) }
+      timing = { kind: 'at', sec: clampSec(parseFloat(m[1])) }
       line = line.slice(m[0].length)
     } else if ((m = line.match(/^\+(\d+(?:\.\d+)?)\s+/))) {
-      timing = { kind: 'after', sec: parseFloat(m[1]) }
+      timing = { kind: 'after', sec: clampSec(parseFloat(m[1])) }
       line = line.slice(m[0].length)
     }
     if (line.startsWith('!')) {
@@ -240,7 +250,8 @@ export function parseScript(srcRaw: string): ScriptEntry[] {
           out.push({ type: 'chat', timing, user: su.user, flags, text: su.text, deleteAfter: 1.8 })
           break
         }
-        case 'timeout': case 'ban': out.push({ type: 'timeout', timing, user: args[0] ?? '', seconds: parseInt(args[1], 10) || 600 }); break
+        case 'timeout': out.push({ type: 'timeout', timing, user: args[0] ?? '', seconds: Math.max(1, Math.min(1209600, parseInt(args[1], 10) || 600)) }); break
+        case 'ban': out.push({ type: 'timeout', timing, user: args[0] ?? '', seconds: Infinity }); break // permanent
         case 'clear': out.push({ type: 'system', timing, kind: 'clear' }); break
         case 'slow': out.push({ type: 'system', timing, kind: 'slow', value: parseInt(args[0], 10) || 3 }); break
         case 'slowoff': out.push({ type: 'system', timing, kind: 'slowoff' }); break
@@ -249,7 +260,13 @@ export function parseScript(srcRaw: string): ScriptEntry[] {
         case 'followers': out.push({ type: 'system', timing, kind: 'followers', value: parseInt(args[0], 10) || 0 }); break
         case 'subsonly': case 'subs': out.push({ type: 'system', timing, kind: 'subsonly' }); break
         case 'system': case 'notice': out.push({ type: 'system', timing, kind: 'text', text: arg }); break
-        case 'burst': case 'spam': out.push({ type: 'burst', timing, count: parseInt(args[0], 10) || 10, text: args.slice(1).join(' ') || 'KEKW' }); break
+        case 'burst': case 'spam': {
+          // "!burst 12 KEKW"  or  "!burst KEKW" (10 by default)
+          const hasCount = /^\d+$/.test(args[0] ?? '')
+          const count = hasCount ? Math.max(1, Math.min(200, parseInt(args[0], 10))) : 10
+          out.push({ type: 'burst', timing, count, text: (hasCount ? args.slice(1) : args).join(' ') || 'KEKW' })
+          break
+        }
         case 'gigantify': case 'giga': {
           const { flags, rest } = parseFlags(arg)
           const su = splitUser(rest)

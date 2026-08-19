@@ -1,6 +1,6 @@
 import { Rng, hashString } from './rng'
 import type { Badge, ChatMessage, Chatter, Config, Fragment, NoticePart } from './types'
-import { generateName, parseCustomNames, BOT_NAMES } from './names'
+import { generateName, parseCustomNames, BOT_NAMES, loginFor } from './names'
 import { POPULAR_CUSTOM_COLORS } from './colors'
 import { assignBadges, makeBadge, sortBadges, subBadgeFor, bitsBadgeVersion, gifterBadgeVersion, type BadgeAssignOptions, type GeneratedSubBadgeSet } from './badges'
 import { EmoteRegistry, REACTION_EMOTES, parseMessage } from './emotes'
@@ -109,7 +109,7 @@ export function buildTimeline(inputs: SimInputs): Timeline {
     if (names.length) cfg.customNames = [names.join(', '), cfg.customNames].filter(Boolean).join(', ')
   }
   const streamerDisplay = cfg.streamerName.trim() || 'Streamer'
-  const streamerLogin = (cfg.streamerLogin.trim() || streamerDisplay).toLowerCase().replace(/[^a-z0-9_]/g, '_')
+  const streamerLogin = loginFor(cfg.streamerLogin.trim() || streamerDisplay)
   const badgeOpts: BadgeAssignOptions = {
     pool: cfg.badgePool,
     subRatio: cfg.subRatio,
@@ -171,28 +171,31 @@ export function buildTimeline(inputs: SimInputs): Timeline {
     let waitMs = 0
     for (const e of entries) {
       if (e.type === 'user' || e.type === 'setuser') {
-        // cast definitions / role changes don't take a slot; "@N !mod bob" applies at that moment though
-        const at = e.timing.kind === 'at' ? e.timing.sec * 1000 : e.timing.kind === 'after' ? prev + e.timing.sec * 1000 : prev
+        // cast definitions / role changes don't take a slot; "@N !mod bob" applies at that moment though.
+        // Definitions before the first line are "up-front": they hold from the very start (pre-fill included)
+        const at = e.timing.kind === 'at' ? e.timing.sec * 1000 : e.timing.kind === 'after' ? prev + e.timing.sec * 1000 : first ? -Infinity : prev
         applyScriptEntry(ctx, e, at, messages, clears)
         continue
       }
-      const autoGap =
-        cfg.pacing === 'even'
-          ? baseGapMs * (cfg.mode === 'script' ? 1 : Math.max(1, cfg.scriptGapMultiplier + 1))
-          : cfg.mode === 'script'
-            ? rng.exp(baseGapMs) * 0.85 + baseGapMs * 0.15
-            : baseGapMs * Math.max(1, cfg.scriptGapMultiplier)
       if (e.type === 'wait') {
         // "!wait N": the next line comes exactly N seconds after the previous one (waits add up)
         waitMs += e.sec * 1000
         first = false
         continue
       }
-      if (e.type === 'speed' && e.timing.kind === 'auto' && waitMs === 0) {
-        // a rate change takes no time of its own: it applies from the previous line on
-        speedChanges.push({ t: prev, mult: e.mult })
+      if (e.type === 'speed' && e.timing.kind === 'auto') {
+        // a rate change takes no time of its own: it applies from the previous line on (a pending !wait stays pending)
+        speedChanges.push({ t: prev + waitMs, mult: e.mult })
         continue
       }
+      // "!speed" also stretches / squeezes the natural gaps between scripted lines
+      const speedNow = speedAt(speedChanges, prev)
+      const autoGap =
+        (cfg.pacing === 'even'
+          ? baseGapMs * (cfg.mode === 'script' ? 1 : Math.max(1, cfg.scriptGapMultiplier + 1))
+          : cfg.mode === 'script'
+            ? rng.exp(baseGapMs) * 0.85 + baseGapMs * 0.15
+            : baseGapMs * Math.max(1, cfg.scriptGapMultiplier)) / speedNow
       let t: number
       let explicitGap = 0 // a deliberate pause the metronome must keep
       if (e.timing.kind === 'at') t = e.timing.sec * 1000
@@ -214,16 +217,20 @@ export function buildTimeline(inputs: SimInputs): Timeline {
       }
       const produced = applyScriptEntry(ctx, e, t, messages, clears)
       if (explicitGap > 0) for (const m of produced) if (m.t === t) m.minGapBefore = explicitGap
+      // "@N" / "+N" / after a "!wait" is a deliberate moment: the metronome keeps it where it is
+      if (e.timing.kind !== 'auto' || explicitGap > 0) for (const m of produced) if (m.t === t) m.pinned = true
       prev = t
-      // in metronomic mode multi-message events (bursts, gift bombs, raids) occupy consecutive slots
-      if (cfg.pacing === 'even' && produced.length > 1) prev = Math.max(t, ...produced.map((m) => m.t))
+      // multi-message events (bursts, gift bombs, raids) occupy the following moments: the next line waits for them
+      if (produced.length > 1) prev = Math.max(t, ...produced.map((m) => m.t))
       scriptEnd = Math.max(scriptEnd, t, ...produced.map((m) => m.t))
     }
+    if (waitMs > 0) scriptEnd = Math.max(scriptEnd, prev + waitMs) // a trailing "!wait" is meant as a pause before the end
   }
 
   // ---- 2) duration -----------------------------------------------------------
   let durationMs = cfg.durationSec * 1000
-  if (cfg.durationAuto && useScript) durationMs = Math.max(3000, scriptEnd + cfg.tailSec * 1000)
+  const producing = entries.some((e) => e.type !== 'user' && e.type !== 'setuser' && e.type !== 'speed' && e.type !== 'wait')
+  if (cfg.durationAuto && useScript && producing) durationMs = Math.max(3000, scriptEnd + cfg.tailSec * 1000)
 
   // ---- 3) ambient stream --------------------------------------------------------
   const ambient = cfg.mode === 'ambient' || cfg.mode === 'hype' || cfg.mode === 'mixed' || (cfg.mode === 'script' && !useScript)
@@ -379,7 +386,7 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
 function resolveUser(ctx: Ctx, name: string | undefined, flags?: UserFlags): Chatter {
   const { rng, cfg } = ctx
   if (!name) return pickChatter(ctx)
-  const login = name.toLowerCase().replace(/[^a-z0-9_]/g, '_')
+  const login = loginFor(name)
   let c = ctx.byLogin.get(login)
   if (!c) {
     if (login === ctx.streamerLogin && ctx.broadcaster) c = ctx.broadcaster
@@ -407,8 +414,8 @@ function applyFlags(ctx: Ctx, c: Chatter, f: UserFlags): void {
   if (f.vip) c.isVip = true
   if (f.broadcaster) c.isBroadcaster = true
   if (f.subMonths !== undefined) {
-    // a bare [sub] (=1) must not demote a 12-month sub
-    c.subMonths = Math.max(c.subMonths, f.subMonths)
+    // a bare [sub] (=1) must not demote a 12-month sub; a sub notice sets the count it announces
+    c.subMonths = f.exactSubMonths ? f.subMonths : Math.max(c.subMonths, f.subMonths)
     c.subTier = c.subTier || 1
   }
   if (f.prime) c.isPrime = true
@@ -501,6 +508,16 @@ function fill(ctx: Ctx, text: string, extra?: { spam?: string; user?: Chatter })
       }
       case 'n':
         return String(rng.int(1, 60))
+      case 'h': // hours of a stream
+        return String(rng.int(1, 9))
+      case 'm': // minutes
+        return String(rng.int(0, 59))
+      case 'd': // days
+        return String(rng.int(1, 30))
+      case 'mo': // months
+        return String(rng.int(1, 11))
+      case 'y': // years
+        return String(rng.int(1, 4))
       case 'big':
         return fmtBig(rng.int(1000, 999999))
       case 'country':
@@ -659,8 +676,12 @@ function tierLabel(tier: 'prime' | 1 | 2 | 3): string {
   return tier === 'prime' ? 'Prime' : `Tier ${tier}`
 }
 
-function subNotice(ctx: Ctx, t: number, user: Chatter, tier: 'prime' | 1 | 2 | 3, months: number, message?: string, streak?: number): ChatMessage {
+function subNotice(ctx: Ctx, t: number, user: Chatter, tier: 'prime' | 1 | 2 | 3, months: number, message?: string, streak?: number, exact = false): ChatMessage {
   ctx.now = t
+  // the notice and the badge must agree: a scripted "!sub bob t1 1" *sets* the months; a random resub can
+  // only continue what the badge already shows
+  if (!exact && user.subMonths >= months) months = user.subMonths + 1
+  if (streak !== undefined && streak > months) streak = months
   const parts: NoticePart[] = [{ text: user.displayName, bold: true, color: 'name' }, { text: ' ' }, { text: 'Subscribed', bold: true }]
   if (tier === 'prime') parts.push({ text: ' with ' }, { text: 'Prime', color: 'link' }, { text: '.' })
   else parts.push({ text: ` at ${tierLabel(tier)}.` })
@@ -669,16 +690,25 @@ function subNotice(ctx: Ctx, t: number, user: Chatter, tier: 'prime' | 1 | 2 | 3
     if (streak && streak > 1 && streak <= months) parts.push({ text: ', currently on a ' }, { text: `${streak} month streak`, bold: true }, { text: '!' })
     else parts.push({ text: '!' })
   }
-  // subscribing updates the user's badge
-  if (user.subMonths < months) {
+  // subscribing updates the user's badge (a scripted month count is what the badge shows from now on)
+  if (user.subMonths !== months) {
     user.subMonths = months
     user.subTier = tier === 'prime' ? 1 : tier
     if (tier === 'prime') user.isPrime = true
-    applyFlags(ctx, user, { subMonths: months, prime: tier === 'prime' || undefined })
+    applyFlags(ctx, user, { subMonths: months, prime: tier === 'prime' || undefined, exactSubMonths: true })
   }
   const msg = message !== undefined && message !== '' ? makeMessage(ctx, t, user, message) : { id: ctx.nextId++, t, user, fragments: [] as Fragment[], text: '' }
   msg.notice = { kind: months > 1 ? 'resub' : 'sub', parts, iconColor: tier === 'prime' ? 'prime' : undefined }
   return msg
+}
+
+/** a gifter's running "gifted in the channel" total: starts at a plausible history, only ever grows */
+const giftTotals = new WeakMap<Chatter, number>()
+function giftTotal(ctx: Ctx, gifter: Chatter, add: number): number {
+  const prev = giftTotals.get(gifter) ?? Math.round(Math.pow(ctx.rng.next(), 2) * 200)
+  const total = prev + add
+  giftTotals.set(gifter, total)
+  return total
 }
 
 function giftNotice(ctx: Ctx, t: number, gifter: Chatter | null, recipient: Chatter, tier: 1 | 2 | 3, total?: number): ChatMessage {
@@ -730,7 +760,7 @@ function applyScriptEntry(ctx: Ctx, e: ScriptEntry, t: number, out: ChatMessage[
   }
   switch (e.type) {
     case 'chat': {
-      const isNew = !!e.user && !ctx.byLogin.has(e.user.toLowerCase().replace(/[^a-z0-9_]/g, '_'))
+      const isNew = !!e.user && !ctx.byLogin.has(loginFor(e.user))
       const user = e.user ? resolveUser(ctx, e.user, e.flags) : e.first ? freshChatter(ctx, 'normal', true) : pickChatter(ctx, ctx.lastScriptUser)
       if (e.first && isNew && !Object.keys(e.flags).length) {
         // a named first-time chatter is brand new: no sub / bits history yet
@@ -758,18 +788,18 @@ function applyScriptEntry(ctx: Ctx, e: ScriptEntry, t: number, out: ChatMessage[
     case 'sub': {
       const user = resolveUser(ctx, e.user)
       const streak = e.months > 1 && rng.chance(0.5) ? e.months : undefined
-      push(subNotice(ctx, t, user, e.tier, e.months, e.message !== undefined ? fill(ctx, e.message) : undefined, streak))
+      push(subNotice(ctx, t, user, e.tier, e.months, e.message !== undefined ? fill(ctx, e.message) : undefined, streak, true))
       break
     }
     case 'gift': {
       const gifter = e.gifter ? resolveUser(ctx, e.gifter) : rng.chance(0.15) ? null : pickChatter(ctx)
       const recipient = e.recipient ? resolveUser(ctx, e.recipient) : pickChatter(ctx, gifter ?? undefined)
-      push(giftNotice(ctx, t, gifter, recipient, e.tier, gifter ? rng.int(1, 60) : undefined))
+      push(giftNotice(ctx, t, gifter, recipient, e.tier, gifter ? giftTotal(ctx, gifter, 1) : undefined))
       break
     }
     case 'gifts': {
       const gifter = resolveUser(ctx, e.gifter)
-      const total = e.count + rng.int(0, 200)
+      const total = giftTotal(ctx, gifter, e.count)
       push(communityGiftNotice(ctx, t, gifter, e.count, e.tier, total))
       let tt = t + (even ? 1 : 250)
       const got = new Set<Chatter>([gifter])
@@ -920,17 +950,33 @@ function generateAmbient(ctx: Ctx, durationMs: number, speedChanges: { t: number
     return 1
   }
   // 1) regular ambient messages (thinning of an inhomogeneous Poisson process)
-  const maxRate = baseRate * Math.max(1, ...bursts.map((b) => b.mult)) * Math.max(1, ...speedChanges.map((c) => c.mult), 1)
+  let maxBurst = 1
+  for (const b of bursts) if (b.mult > maxBurst) maxBurst = b.mult
+  let maxSpeed = 1
+  for (const c of speedChanges) if (c.mult > maxSpeed) maxSpeed = c.mult
+  const maxRate = baseRate * maxBurst * maxSpeed
   let t = startMs < 0 ? startMs : cfg.startDelayMs
   let lastUser: Chatter | undefined
   let lastBotAt = -1e9
   const raidWindows: { t0: number; t1: number; users: Chatter[] }[] = []
   ctx.raidWindows = raidWindows
+  // scripted rows already sit on the metronome (mixed mode): a filler message must not take their moment
+  const scripted = even ? out.filter((m) => m.t >= (startMs < 0 ? startMs : cfg.startDelayMs)).map((m) => m.t).sort((a, b) => a - b) : []
+  let scriptedIdx = 0
   while (t < durationMs) {
     if (even) {
       // metronomic: one message per interval (speed changes still apply)
-      t += 60000 / (mpm * speedAt(speedChanges, t))
+      const step = 60000 / (mpm * speedAt(speedChanges, t))
+      const tPrev = t
+      t += step
       if (t >= durationMs) break
+      while (scriptedIdx < scripted.length && scripted[scriptedIdx] <= tPrev) scriptedIdx++
+      if (scriptedIdx < scripted.length && scripted[scriptedIdx] <= t + step * 0.5) {
+        // a scripted row lands in this interval: it *is* this beat
+        t = Math.max(t, scripted[scriptedIdx])
+        scriptedIdx++
+        continue
+      }
     } else {
       t += rng.exp(1 / maxRate)
       if (t >= durationMs) break
@@ -993,16 +1039,20 @@ function generateAmbient(ctx: Ctx, durationMs: number, speedChanges: { t: number
     const gifter = rng.chance(0.1) ? null : pickChatter(ctx)
     if (gifter && rng.chance(0.3)) {
       const count = rng.weighted([5, 10, 20, 50, 100], [50, 30, 12, 6, 2])
-      const total = count + Math.round(Math.pow(rng.next(), 2) * 800)
+      const total = giftTotal(ctx, gifter, count)
       out.push(communityGiftNotice(ctx, nt, gifter, count, 1, total))
       let tt = nt + 250
+      const got = new Set<Chatter>([gifter])
       for (let i = 0; i < Math.min(count, 20); i++) {
-        out.push(giftNotice(ctx, tt, gifter, pickChatter(ctx, gifter), 1))
+        let recipient = pickChatter(ctx, gifter)
+        for (let k = 0; k < 6 && got.has(recipient); k++) recipient = pickChatter(ctx, gifter)
+        got.add(recipient)
+        out.push(giftNotice(ctx, tt, gifter, recipient, 1))
         tt += rng.int(60, 200)
       }
       spawnReaction(ctx, nt + 900, 'gifted', out, gifter)
     } else {
-      out.push(giftNotice(ctx, nt, gifter, pickChatter(ctx, gifter ?? undefined), rng.chance(0.93) ? 1 : 2, gifter ? rng.int(1, 80) : undefined))
+      out.push(giftNotice(ctx, nt, gifter, pickChatter(ctx, gifter ?? undefined), rng.chance(0.93) ? 1 : 2, gifter ? giftTotal(ctx, gifter, 1) : undefined))
       if (rng.chance(0.4)) spawnReaction(ctx, nt + 700, 'gifted', out, gifter ?? undefined)
     }
   })
@@ -1171,16 +1221,13 @@ function spawnRaid(ctx: Ctx, t: number, count: number, out: ChatMessage[], raidi
  */
 function evenOut(messages: ChatMessage[], gap: number, speedChanges: { t: number; mult: number }[]): void {
   if (!messages.length) return
-  // deletions are re-timed relative to their message (same distance after it as before)
-  const shift = (m: ChatMessage, newT: number) => {
-    const d = newT - m.t
-    if (m.deletedAt !== undefined) m.deletedAt += d
-    m.t = newT
-  }
+  // original times, so moments that are not messages (deletions by a timeout) can be re-timed the same way
+  const origT = new Map<ChatMessage, number>(messages.map((m) => [m, m.t]))
+  const q = (v: number) => Math.round(v * 1000) / 1000 // µs grid: no float dust on frame boundaries
   const before = messages.filter((m) => m.t < 0)
   const after = messages.filter((m) => m.t >= 0)
   // pre-fill: walk backwards from 0
-  for (let i = before.length - 1, k = 1; i >= 0; i--, k++) shift(before[i], -k * gap)
+  for (let i = before.length - 1, k = 1; i >= 0; i--, k++) before[i].t = q(-k * gap)
   if (after.length) {
     let prevOrig = after[0].t
     let prevNew = after[0].t
@@ -1191,12 +1238,31 @@ function evenOut(messages: ChatMessage[], gap: number, speedChanges: { t: number
       const step = gap / speedAt(speedChanges, prevOrig)
       // explicit pauses (!wait, +N) are kept exactly; other far-apart timings (@N) at least keep their distance
       const wanted = Math.max(step, after[i].minGapBefore ?? 0, origGap > gap * 2.5 && !after[i].minGapBefore ? origGap : 0)
-      const newT = prevNew + wanted
+      let newT = prevNew + wanted
+      // a deliberately placed row (@N, +N, after !wait) stays at its moment — later rows continue from it
+      if (after[i].pinned && orig >= prevNew + 1) newT = orig
       prevOrig = orig
-      shift(after[i], newT)
-      prevNew = newT
+      after[i].t = q(newT)
+      prevNew = after[i].t
     }
   }
+  // deletions: the timeout happened at an original moment T — move it like the last row before T moved
+  const rows = [...messages].sort((a, b) => origT.get(a)! - origT.get(b)!)
+  const mapTime = (T: number) => {
+    let lo = 0
+    let hi = rows.length - 1
+    let k = -1
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1
+      if (origT.get(rows[mid])! <= T) {
+        k = mid
+        lo = mid + 1
+      } else hi = mid - 1
+    }
+    if (k < 0) return T
+    return rows[k].t + (T - origT.get(rows[k])!)
+  }
+  for (const m of messages) if (m.deletedAt !== undefined) m.deletedAt = Math.max(m.t, q(mapTime(m.deletedAt)))
   messages.sort((a, b) => a.t - b.t || a.id - b.id)
 }
 

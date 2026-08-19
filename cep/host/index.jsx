@@ -117,12 +117,6 @@ $.global.TWITCHSIM = (function () {
       prop.expression = expr;
     } catch (e) {}
   }
-  function addControl(fx, match, name, valueMatch, v) {
-    var c = fx.addProperty(match);
-    c.name = name;
-    c.property(valueMatch).setValue(v);
-    return c;
-  }
   function num(v, d) {
     return typeof v === 'number' && isFinite(v) ? v : d;
   }
@@ -132,9 +126,9 @@ $.global.TWITCHSIM = (function () {
   var DOT = ' \u00b7 ';
   var NM = {
     style: 'Animation' + DOT + 'Style',
-    dur: 'Animation' + DOT + 'Duration (ms)',
+    dur: 'Animation' + DOT + 'Duration (frames)',
     ease: 'Animation' + DOT + 'Ease out (%)',
-    slide: 'Animation' + DOT + 'Slide distance (px)',
+    slide: 'Animation' + DOT + 'Slide distance (% of chat width)',
     pop: 'Animation' + DOT + 'Pop from (%)',
     gap: 'Layout' + DOT + 'Row gap (px)',
     opacity: 'Look' + DOT + 'Opacity (%)',
@@ -149,7 +143,7 @@ $.global.TWITCHSIM = (function () {
     bgOpacity: 'Look' + DOT + 'Background opacity (%)',
     bgColor: 'Look' + DOT + 'Background color',
     radius: 'Look' + DOT + 'Background corners (px)',
-    fade: 'Look' + DOT + 'Top fade (px)'
+    fade: 'Look' + DOT + 'Top fade (% of chat height)'
   };
   var ANIM_STYLES = ['Instant', 'Slide up', 'Slide up + fade', 'Fade', 'Slide from left', 'Slide from right', 'Pop'];
 
@@ -162,7 +156,7 @@ $.global.TWITCHSIM = (function () {
     'function CTL(C, n, t) { var p = C.effect(n)(1); return t === undefined ? p.value : p.valueAtTime(t); }\n';
   /** the entrance parameters of the row that arrived at t0 (sampled at its arrival, so keyframed controls apply per row) */
   function exprAnimAt(tExpr) {
-    return 'var st = Math.round(CTL(C, ' + q(NM.style) + ', ' + tExpr + '));\n' + 'var dur = Math.max(1, CTL(C, ' + q(NM.dur) + ', ' + tExpr + ')) / 1000;\n' + 'var e = Math.max(0, Math.min(1, CTL(C, ' + q(NM.ease) + ', ' + tExpr + ') / 100));\n';
+    return 'var st = Math.round(CTL(C, ' + q(NM.style) + ', ' + tExpr + '));\n' + 'var dur = Math.max(0.001, CTL(C, ' + q(NM.dur) + ', ' + tExpr + ') * thisComp.frameDuration);\n' + 'var e = Math.max(0, Math.min(1, CTL(C, ' + q(NM.ease) + ', ' + tExpr + ') / 100));\n';
   }
 
   // ---------------------------------------------------------------- fonts
@@ -198,7 +192,19 @@ $.global.TWITCHSIM = (function () {
     return true; // can't tell on old versions; assume it is there
   }
   /** -> { ps: postScriptName, faux: use fauxItalic } */
+  // CSS generic families have no PostScript name: use what the browser draws them with on this OS
+  var GENERIC_FAMILIES = { 'system-ui': true, 'sans-serif': true, 'ui-sans-serif': true, serif: true, 'ui-serif': true, monospace: true, 'ui-monospace': true, cursive: true, fantasy: true };
+  function concreteFamily(family) {
+    var f = String(family || '').toLowerCase();
+    if (!GENERIC_FAMILIES[f]) return family;
+    var win = $.os.toLowerCase().indexOf('windows') >= 0;
+    if (f === 'monospace' || f === 'ui-monospace') return win ? 'Consolas' : 'Menlo';
+    if (f === 'serif' || f === 'ui-serif') return win ? 'Times New Roman' : 'Times';
+    return win ? 'Segoe UI' : 'Helvetica Neue';
+  }
+
   function resolveFont(family, weight, italic) {
+    family = concreteFamily(family);
     var key = family + '|' + weight + '|' + (italic ? 1 : 0);
     if (fontCache[key]) return fontCache[key];
     var res = null;
@@ -273,6 +279,14 @@ $.global.TWITCHSIM = (function () {
   }
 
   // ---------------------------------------------------------------- project items
+
+  /** a null layer gets a "Null N" footage item in Solids: tag it (removed with the build) and name it */
+  function tagNullSource(layer, name, tag) {
+    try {
+      layer.source.comment = tag;
+      layer.source.name = name;
+    } catch (e) {}
+  }
 
   function findFolderByComment(comment) {
     var items = app.project.items;
@@ -410,7 +424,7 @@ $.global.TWITCHSIM = (function () {
       if (f && f.exists) m.applyPreset(f);
     } catch (e) {}
     // 2) fallback: the Layer > Layer Styles menu commands. AE registers them lazily (only once that submenu
-    //    was opened in the session), so this may silently do nothing — hence the preset first.
+    //    was opened in the session), so this may silently do nothing - hence the preset first.
     if (!hasStyles()) {
       try {
         st.styleComp.openInViewer();
@@ -560,44 +574,96 @@ $.global.TWITCHSIM = (function () {
     return l;
   }
 
-  /** Effect Controls on the Controls null: the live, expression-driven tweaks (defaults = the built look) */
-  function addControls(layer, data) {
-    var fx = layer.property('ADBE Effect Parade');
+  /** the Controls null's defaults for this build: [name, matchName, value] in display order */
+  function controlDefaults(data) {
     var bgd = data.background || { color: [0.09, 0.09, 0.1], opacity: 0, radius: 0 };
     var stroke = num(data.text.strokeWidth, 0);
     var an = data.anim || { style: 2, ms: 300, slidePx: 340 };
-    // Animation — how rows come in (sampled per row at its arrival, so keyframes apply to later rows)
-    var styleOk = false;
+    return [
+      [NM.style, 'ADBE Dropdown Control', Math.max(1, Math.min(ANIM_STYLES.length, num(an.style, 2)))],
+      [NM.dur, 'ADBE Slider Control', Math.round((num(an.ms, 300) / 1000) * data.fps * 100) / 100],
+      [NM.ease, 'ADBE Slider Control', 100],
+      [NM.slide, 'ADBE Slider Control', 100],
+      [NM.pop, 'ADBE Slider Control', 70],
+      [NM.gap, 'ADBE Slider Control', 0],
+      [NM.opacity, 'ADBE Slider Control', 100],
+      [NM.textOn, 'ADBE Checkbox Control', 0],
+      [NM.text, 'ADBE Color Control', [1, 1, 1, 1]],
+      [NM.nameOn, 'ADBE Checkbox Control', 0],
+      [NM.name, 'ADBE Color Control', [1, 1, 1, 1]],
+      [NM.outline, 'ADBE Slider Control', stroke / 2],
+      [NM.shadow, 'ADBE Slider Control', data.text.shadow ? 85 : 0],
+      [NM.shadowSoft, 'ADBE Slider Control', 3 * data.scale],
+      [NM.shadowDist, 'ADBE Slider Control', 1 * data.scale],
+      [NM.bgOpacity, 'ADBE Slider Control', num(bgd.opacity, 0)],
+      [NM.bgColor, 'ADBE Color Control', [bgd.color[0], bgd.color[1], bgd.color[2], 1]],
+      [NM.radius, 'ADBE Slider Control', num(bgd.radius, 0)],
+      [NM.fade, 'ADBE Slider Control', Math.max(0, Math.min(100, (num(data.fadeTop, 0) / Math.max(1, data.chat.h)) * 100))]
+    ];
+  }
+  function sameValue(a, b) {
+    if (a instanceof Array || b instanceof Array) {
+      if (!(a instanceof Array) || !(b instanceof Array) || a.length !== b.length) return false;
+      for (var i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > 1e-4) return false;
+      return true;
+    }
+    return Math.abs(num(a, 0) - num(b, 0)) < 1e-4;
+  }
+  function addOneControl(fx, name, match, v) {
+    if (match === 'ADBE Dropdown Control') {
+      try {
+        var dd = fx.addProperty('ADBE Dropdown Control');
+        // setPropertyParameters re-creates the effect: name it afterwards, through the returned property
+        var menu = dd.property(1).setPropertyParameters(ANIM_STYLES);
+        menu.parentProperty.name = name;
+        menu.setValue(v);
+        if (fx.property(fx.numProperties).name === name) return;
+        fx.property(fx.numProperties).remove();
+      } catch (e) {}
+      // AE < 17.0.1 has no dropdown: a slider with the same meaning (1 Instant ... 7 Pop)
+      match = 'ADBE Slider Control';
+    }
+    var c = fx.addProperty(match);
+    c.name = name;
+    c.property(1).setValue(v);
+  }
+  /**
+   * Effect Controls on the Controls null: the live, expression-driven tweaks. Existing controls are kept
+   * (values, keyframes, expressions = the user's work); a control the user never touched (still at the
+   * previous build's default) follows the new default; missing ones are added; the order is restored.
+   * Returns the map of defaults to remember for the next build.
+   */
+  function ensureControls(layer, data, prevDefaults) {
+    var fx = layer.property('ADBE Effect Parade');
+    var defs = controlDefaults(data);
+    var out = {};
+    for (var i = 0; i < defs.length; i++) {
+      var name = defs[i][0];
+      var match = defs[i][1];
+      var v = defs[i][2];
+      out[name] = v;
+      var existing = null;
+      try {
+        existing = fx.property(name);
+      } catch (e) {
+        existing = null;
+      }
+      if (existing) {
+        try {
+          var p = existing.property(1);
+          var untouched = prevDefaults && prevDefaults[name] !== undefined && sameValue(p.value, prevDefaults[name]);
+          if (untouched && p.numKeys === 0 && !p.expression) p.setValue(v);
+        } catch (e) {}
+      } else addOneControl(fx, name, match, v);
+    }
+    // display order: ours first in the canonical order, anything the user added after
     try {
-      var dd = fx.addProperty('ADBE Dropdown Control');
-      // setPropertyParameters re-creates the effect: name it afterwards, through the returned property
-      var menu = dd.property(1).setPropertyParameters(ANIM_STYLES);
-      menu.parentProperty.name = NM.style;
-      menu.setValue(Math.max(1, Math.min(ANIM_STYLES.length, num(an.style, 2))));
-      styleOk = fx.property(fx.numProperties).name === NM.style;
-      if (!styleOk) fx.property(fx.numProperties).remove();
+      for (var k = 0; k < defs.length; k++) {
+        var pr = fx.property(defs[k][0]);
+        if (pr && pr.propertyIndex !== k + 1) pr.moveTo(k + 1);
+      }
     } catch (e) {}
-    if (!styleOk) addControl(fx, 'ADBE Slider Control', NM.style, 'ADBE Slider Control-0001', num(an.style, 2)); // AE < 17.0.1: 1 Instant, 2 Slide up, 3 Slide up + fade, 4 Fade, 5 Slide from left, 6 Slide from right, 7 Pop
-    addControl(fx, 'ADBE Slider Control', NM.dur, 'ADBE Slider Control-0001', num(an.ms, 300));
-    addControl(fx, 'ADBE Slider Control', NM.ease, 'ADBE Slider Control-0001', 100);
-    addControl(fx, 'ADBE Slider Control', NM.slide, 'ADBE Slider Control-0001', num(an.slidePx, 340));
-    addControl(fx, 'ADBE Slider Control', NM.pop, 'ADBE Slider Control-0001', 70);
-    // Layout
-    addControl(fx, 'ADBE Slider Control', NM.gap, 'ADBE Slider Control-0001', 0);
-    // Look
-    addControl(fx, 'ADBE Slider Control', NM.opacity, 'ADBE Slider Control-0001', 100);
-    addControl(fx, 'ADBE Checkbox Control', NM.textOn, 'ADBE Checkbox Control-0001', 0);
-    addControl(fx, 'ADBE Color Control', NM.text, 'ADBE Color Control-0001', [1, 1, 1, 1]);
-    addControl(fx, 'ADBE Checkbox Control', NM.nameOn, 'ADBE Checkbox Control-0001', 0);
-    addControl(fx, 'ADBE Color Control', NM.name, 'ADBE Color Control-0001', [1, 1, 1, 1]);
-    addControl(fx, 'ADBE Slider Control', NM.outline, 'ADBE Slider Control-0001', stroke / 2);
-    addControl(fx, 'ADBE Slider Control', NM.shadow, 'ADBE Slider Control-0001', data.text.shadow ? 85 : 0);
-    addControl(fx, 'ADBE Slider Control', NM.shadowSoft, 'ADBE Slider Control-0001', 3 * data.scale);
-    addControl(fx, 'ADBE Slider Control', NM.shadowDist, 'ADBE Slider Control-0001', 1 * data.scale);
-    addControl(fx, 'ADBE Slider Control', NM.bgOpacity, 'ADBE Slider Control-0001', num(bgd.opacity, 0));
-    addControl(fx, 'ADBE Color Control', NM.bgColor, 'ADBE Color Control-0001', [bgd.color[0], bgd.color[1], bgd.color[2], 1]);
-    addControl(fx, 'ADBE Slider Control', NM.radius, 'ADBE Slider Control-0001', num(bgd.radius, 0));
-    addControl(fx, 'ADBE Slider Control', NM.fade, 'ADBE Slider Control-0001', Math.max(0, num(data.fadeTop, 0)));
+    return out;
   }
 
   /**
@@ -608,8 +674,9 @@ $.global.TWITCHSIM = (function () {
    * message layer: chapter "ts <arrival> <height> <deleted height> <deletion time>".
    */
   function messageExpressions(ml, msg) {
-    var lit = 'var t0 = ' + msg.t0 + ', e0 = ' + msg.epochStart + ', idx = ' + num(msg.idx, 0) + ';\n';
-    var head = lit + EXPR_LIB + 'var v = value;\ntry {\n  var C = ' + ctlRef(true) + ';\n';
+    // CAP (s): rows older than this are settled whatever the controls say - the live Duration is clamped to it
+    var lit = 'var t0 = ' + msg.t0 + ', e0 = ' + msg.epochStart + ', idx = ' + num(msg.idx, 0) + ', CW = ' + st.data.chat.w + ';\n';
+    var head = lit + EXPR_LIB + 'var v = value;\ntry {\n  var C = ' + ctlRef(true) + ';\n  var CAP = 6;\n';
     var tail = '} catch (err) {}\nv';
     // Y (local, inside Scroll): + row gap, - transient of older rows still growing
     var y =
@@ -623,7 +690,7 @@ $.global.TWITCHSIM = (function () {
       '    if (tk < e0) break;\n' + // older than my /clear: everything below is older still
       '    if (tk > t0) continue;\n' +
       '    var age = time - tk;\n' +
-      '    if (age >= 5) break;\n' + // layers are in arrival order: the rest is older
+      '    if (age >= CAP) break;\n' + // layers are in arrival order: the rest is older
       '    if (age < 0) continue;\n' +
       '    ' + exprAnimAt('tk').replace(/\n/g, '\n    ') + 'var g = GROW(st, age, dur, e);\n' +
       '    if (g < 1) tr += (time >= parseFloat(a[4]) ? parseFloat(a[3]) : parseFloat(a[2])) * (1 - g);\n' +
@@ -636,10 +703,10 @@ $.global.TWITCHSIM = (function () {
       '  var age = time - t0;\n' +
       '  ' + exprAnimAt('t0').replace(/\n/g, '\n  ') + 'if ((st == 5 || st == 6) && age >= 0 && age < dur) {\n' +
       '    var p = P(age / dur, e);\n' +
-      '    v = value + (st == 5 ? -1 : 1) * CTL(C, ' + q(NM.slide) + ', t0) * (1 - p);\n' +
+      '    v = value + (st == 5 ? -1 : 1) * CW * (CTL(C, ' + q(NM.slide) + ', t0) / 100) * (1 - p);\n' +
       '  }\n' +
       tail;
-    // opacity: fade-ins × the global Look opacity
+    // opacity: fade-ins x the global Look opacity
     var o =
       head +
       '  var look = CTL(C, ' + q(NM.opacity) + ') / 100;\n' +
@@ -683,6 +750,7 @@ $.global.TWITCHSIM = (function () {
       '  var e0 = -1e9;\n' +
       '  for (var i = 0; i < clears.length; i++) if (clears[i] <= time) e0 = clears[i];\n' +
       '  var count = 0, tr = 0;\n' +
+      '  var CAP = 6;\n' +
       '  for (var j = 1; j <= thisComp.numLayers; j++) {\n' +
       '    var a = TS(thisComp.layer(j));\n' +
       '    if (!a) continue;\n' +
@@ -691,7 +759,7 @@ $.global.TWITCHSIM = (function () {
       '    if (tk > time) continue;\n' +
       '    var age = time - tk;\n' +
       '    if (gap != 0) count++;\n' +
-      '    if (age < 5) {\n' +
+      '    if (age < CAP) {\n' +
       '      ' + exprAnimAt('tk').replace(/\n/g, '\n      ') + 'var g = GROW(st, age, dur, e);\n' +
       '      if (g < 1) tr += (time >= parseFloat(a[4]) ? parseFloat(a[3]) : parseFloat(a[2])) * (1 - g);\n' +
       '    } else if (gap == 0) break;\n' +
@@ -764,7 +832,15 @@ $.global.TWITCHSIM = (function () {
     for (var i = 1; i <= main.numLayers; i++) {
       var l = main.layer(i);
       if (isOurs(l)) continue;
-      var rec = { layer: l, parentName: null, local: null };
+      var rec = { layer: l, parentName: null, local: null, belowName: null };
+      // remember which of our layers sat right below it, so the rebuild can put it back at the same depth
+      // (otherwise the user's overlays end up under the Background)
+      for (var b = i + 1; b <= main.numLayers; b++) {
+        if (isOurs(main.layer(b))) {
+          rec.belowName = main.layer(b).name;
+          break;
+        }
+      }
       if (l.parent && isOurs(l.parent)) {
         rec.parentName = l.parent.name;
         try {
@@ -776,7 +852,12 @@ $.global.TWITCHSIM = (function () {
           if (p.numKeys === 0 && a.numKeys === 0 && s.numKeys === 0 && r.numKeys === 0 && !p.dimensionsSeparated) rec.local = { p: p.value, a: a.value, s: s.value, r: r.value };
         } catch (e) {}
         // detach before its parent disappears (keeps world position)
-        l.parent = null;
+        try {
+          var wasLocked = l.locked;
+          if (wasLocked) l.locked = false;
+          l.parent = null;
+          if (wasLocked) l.locked = true;
+        } catch (e) {}
       }
       out.push(rec);
     }
@@ -784,6 +865,18 @@ $.global.TWITCHSIM = (function () {
   }
   function reattachForeign(main, recs) {
     var n = 0;
+    // stacking first (top to bottom, so relative order among the user's layers survives)
+    for (var s0 = 0; s0 < recs.length; s0++) {
+      var r0 = recs[s0];
+      if (!r0.belowName) continue;
+      var below = findLayerByName(main, r0.belowName);
+      if (!below && r0.belowName === 'TwitchSim Anchor') below = findLayerByName(main, CTL);
+      if (below) {
+        try {
+          r0.layer.moveBefore(below);
+        } catch (e) {}
+      }
+    }
     for (var i = 0; i < recs.length; i++) {
       var rec = recs[i];
       if (!rec.parentName) continue;
@@ -791,6 +884,11 @@ $.global.TWITCHSIM = (function () {
       if (!np && rec.parentName === 'TwitchSim Anchor') np = findLayerByName(main, CTL); // builds before 1.1
       if (!np) continue;
       try {
+        var relock = false;
+        try {
+          relock = !!rec.layer.locked;
+          if (relock) rec.layer.locked = false;
+        } catch (e) {}
         if (rec.local) {
           rec.layer.setParentWithJump(np);
           var t = tf(rec.layer);
@@ -799,6 +897,7 @@ $.global.TWITCHSIM = (function () {
           t.property('ADBE Scale').setValue(rec.local.s);
           t.property('ADBE Rotate Z').setValue(rec.local.r);
         } else rec.layer.parent = np;
+        if (relock) rec.layer.locked = true;
         n++;
       } catch (e) {}
     }
@@ -865,10 +964,22 @@ $.global.TWITCHSIM = (function () {
       var mainTag = TAG + '-main:' + data.buildKey;
       var main = root ? findCompInFolder(root, mainTag) : null;
       if (!main) main = findCompByComment(mainTag);
+      var oldAnchor = null;
       if (main) {
         st.foreign = collectForeign(main);
-        for (var i = main.numLayers; i >= 1; i--) if (isOurs(main.layer(i))) main.layer(i).remove();
+        // the Controls null survives a rebuild (its values, keyframes and transform are the user's work);
+        // an old build's "TwitchSim Anchor" (no controls) is replaced
+        for (var i = main.numLayers; i >= 1; i--) {
+          var ol = main.layer(i);
+          if (!isOurs(ol)) continue;
+          try {
+            ol.locked = false; // a locked layer refuses to be changed or removed
+          } catch (e) {}
+          if (ol.comment.indexOf(TAG + '-anchor') === 0 && ol.name === CTL && !oldAnchor) oldAnchor = ol;
+          else ol.remove();
+        }
       }
+      if (!oldAnchor) removeTaggedItems(TAG + '-null:' + data.buildKey); // an old Controls null's source, if it went
       if (root) {
         // only OUR generated items go (comment tag); anything the user dropped into the folder stays,
         // and so does any duplicate of the main comp (a copy the user made keeps the tag)
@@ -918,15 +1029,45 @@ $.global.TWITCHSIM = (function () {
       // The Controls null is the parent of everything. Its layer-space origin stays at the chat's top-left
       // (children sit at [0,0]) while its anchor point is the chat's pin point, so scaling / rotating it
       // works about the same corner or centre the chat is aligned to.
-      var anchor = main.layers.addNull(dur);
-      anchor.name = CTL;
-      anchor.comment = TAG + '-anchor';
-      anchor.label = 10;
       var ax = num(data.chat.ax, 0.5) * data.chat.w;
       var ay = num(data.chat.ay, 0.5) * data.chat.h;
-      tf(anchor).property('ADBE Anchor Point').setValue([ax, ay]);
-      tf(anchor).property('ADBE Position').setValue([data.chat.x + ax, data.chat.y + ay]);
-      addControls(anchor, data);
+      var geo = [data.chat.x, data.chat.y, data.chat.w, data.chat.h, ax, ay].join(',');
+      var anchor = oldAnchor;
+      var prev = null; // what the previous build wrote: { g: geometry, d: control defaults }
+      if (anchor) {
+        try {
+          var cm = anchor.comment;
+          var brace = cm.indexOf('{');
+          if (brace > 0) prev = J.parse(cm.slice(brace));
+        } catch (e) {
+          prev = null;
+        }
+        // the null's source (a "Null N" solid) was removed with the tagged solids: re-tag the new one AE gives it
+        try {
+          if (!anchor.source || !anchor.source.name) anchor = null;
+        } catch (e) {
+          anchor = null;
+        }
+      }
+      if (!anchor) {
+        anchor = main.layers.addNull(dur);
+        anchor.name = CTL;
+        anchor.label = 10;
+      }
+      // its "Null N" source lives in Solids: tagged apart from the per-build solids, it survives rebuilds
+      // (deleting a footage item deletes the layers that use it) and goes with remove()
+      tagNullSource(anchor, 'TwitchSim Controls (null)', TAG + '-null:' + data.buildKey);
+      try {
+        anchor.outPoint = Math.max(anchor.outPoint, dur);
+      } catch (e) {}
+      // transform: a moved / scaled / rotated null keeps its transform; only when the chat's place in the
+      // frame changed in the panel (other size / anchor / margins) is the position reset to the new default
+      if (!prev || prev.g !== geo) {
+        tf(anchor).property('ADBE Anchor Point').setValue([ax, ay]);
+        tf(anchor).property('ADBE Position').setValue([data.chat.x + ax, data.chat.y + ay]);
+      }
+      var defaults = ensureControls(anchor, data, prev ? prev.d : null);
+      anchor.comment = TAG + '-anchor ' + J.stringify({ g: geo, d: defaults });
       st.anchor = anchor;
 
       var bgd = data.background || { color: [0.09, 0.09, 0.1], opacity: 0, radius: 0 };
@@ -946,6 +1087,7 @@ $.global.TWITCHSIM = (function () {
       scroll.name = 'Scroll';
       scroll.comment = TAG + '-scroll';
       scroll.label = 10;
+      tagNullSource(scroll, 'TwitchSim Scroll (null)', TAG + '-solid:' + data.buildKey);
       scroll.parent = anchor;
       tf(scroll).property('ADBE Position').setValue([0, 0]);
       st.scroll = scroll;
@@ -953,15 +1095,15 @@ $.global.TWITCHSIM = (function () {
       // The canvas clips everything to the chat rectangle; in AE a shared luma matte does the same
       // (rows sliding out at the top / in at the bottom stay inside), plus the optional top fade.
       if (aeVersion() >= 23) {
-        var matte = main.layers.addSolid([1, 1, 1], 'Chat area (matte)', data.chat.w, data.chat.h, 1, dur);
+        // a white rounded rectangle (its corners follow "Background corners", like the canvas' clip)
+        var matte = makeRect(main, { name: 'Chat area (matte)', x: 0, y: 0, w: data.chat.w, h: data.chat.h, radius: bgd.radius, color: [1, 1, 1], opacity: 100 });
         matte.comment = TAG + '-matte';
-        try {
-          matte.source.comment = TAG + '-solid:' + data.buildKey;
-        } catch (e) {}
         matte.parent = anchor;
-        tf(matte).property('ADBE Anchor Point').setValue([0, 0]);
-        tf(matte).property('ADBE Position').setValue([0, 0]);
-        // top fade: black->white ramp over the first N px (N = "Top fade" on the Controls null; 0 = none)
+        try {
+          var mg = matte.property('ADBE Root Vectors Group').property(1).property('ADBE Vectors Group');
+          setExpr(mg.property('ADBE Vector Shape - Rect').property('ADBE Vector Rect Roundness'), safeExpr(ctlProp(NM.radius, 'Slider', true)));
+        } catch (e) {}
+        // top fade: black->white ramp over the first N % of the chat height ("Top fade" on the Controls null; 0 = none)
         try {
           var ramp = matte.property('ADBE Effect Parade').addProperty('ADBE Ramp');
           ramp.name = 'Top fade';
@@ -969,7 +1111,7 @@ $.global.TWITCHSIM = (function () {
           ramp.property('ADBE Ramp-0002').setValue([0, 0, 0, 1]);
           ramp.property('ADBE Ramp-0003').setValue([data.chat.w / 2, Math.max(0, num(data.fadeTop, 0))]);
           ramp.property('ADBE Ramp-0004').setValue([1, 1, 1, 1]);
-          setExpr(ramp.property('ADBE Ramp-0003'), safeExpr('[value[0], Math.max(0, ' + ctlProp(NM.fade, 'Slider', true) + ')]'));
+          setExpr(ramp.property('ADBE Ramp-0003'), safeExpr('[value[0], Math.max(0, ' + ctlProp(NM.fade, 'Slider', true) + ') / 100 * ' + data.chat.h + ']'));
         } catch (e) {}
         st.matte = matte;
       }
@@ -1034,11 +1176,17 @@ $.global.TWITCHSIM = (function () {
     if (!root && !main) return reply({ removed: false });
     app.beginUndoGroup('TwitchSim: remove build');
     try {
-      if (root) removeItemDeep(root);
-      // the main comp may live outside the folder; the matte solid lives in Solids
+      // only OUR items go (comment tag); anything the user dropped into the folder stays, and the
+      // folder itself only when it is empty afterwards
+      if (root) {
+        for (var j = root.numItems; j >= 1; j--) if (isOurs(root.item(j))) removeItemDeep(root.item(j));
+        if (root.numItems === 0) root.remove();
+      }
+      // the main comp may live outside the folder; the null sources live in Solids
       main = findCompByComment(TAG + '-main:' + a.buildKey);
       if (main) main.remove();
       removeTaggedItems(TAG + '-solid:' + a.buildKey);
+      removeTaggedItems(TAG + '-null:' + a.buildKey);
     } finally {
       app.endUndoGroup();
     }

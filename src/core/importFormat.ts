@@ -155,9 +155,12 @@ export function importToScript(doc: ImportDoc): string {
     const type = (m.type ?? 'chat').toLowerCase()
     const user = userToken(who(m.user))
     const text = clean(m.text)
-    const withUser = (t: string) => (user === '*' ? t : `${user}: ${t}`)
-    // a chat line without text would render as "name:" — skip it (events like subs/raids don't need text)
-    if ((type === 'chat' || type === 'message' || type === 'msg') && !text) continue
+    // a random viewer's text that starts like a command / comment / timing ("!raid when", "#1 fan", "+1")
+    // gets the "*: " escape so the DSL takes it as plain text
+    const withUser = (t: string) => (user === '*' ? (/^[!#+@[\\`/]/.test(t) || /^\S+:\s/.test(t) ? `*: ${t}` : t) : `${user}: ${t}`)
+    // a line without text would render as "name:" — skip it (events like subs/raids don't need text)
+    const needsText = ['chat', 'message', 'msg', 'text', 'highlight', 'first', 'me', 'delete', 'gigantify', 'reply', 'reward', 'redeem', 'effect']
+    if (needsText.includes(type) && !text) continue
     switch (type) {
       case 'chat':
       case 'message':
@@ -182,9 +185,13 @@ export function importToScript(doc: ImportDoc): string {
         out.push(`${timing}!raid ${user} ${m.count ?? 50}`)
         break
       case 'announce':
-      case 'announcement':
-        out.push(`${timing}!announce ${m.color ?? 'purple'} ${text}`)
+      case 'announcement': {
+        // only the Twitch announcement colours (or a hex) — anything else would become the first word of the text
+        const c = String(m.color ?? '').toLowerCase()
+        const color = ['purple', 'primary', 'blue', 'green', 'orange', 'red'].includes(c) ? c : normalizeHex(c) ?? 'purple'
+        out.push(`${timing}!announce ${color} ${text}`)
         break
+      }
       case 'cheer':
       case 'bits':
         out.push(`${timing}!cheer ${user} ${m.bits ?? m.count ?? 100} ${text}`)

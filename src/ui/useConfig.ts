@@ -33,6 +33,19 @@ export function decodeShare(s: string): Partial<Config> | null {
   }
 }
 
+/** string fields that must be one of a fixed set — a preset / share link with an unknown value is ignored for that key */
+const ENUMS: Partial<Record<keyof Config, readonly string[]>> = {
+  mode: ['script', 'ambient', 'mixed', 'hype'],
+  mood: ['general', 'hype', 'chill', 'funny', 'gaming', 'wholesome', 'toxic', 'reactions', 'clutch', 'music', 'irl'],
+  pacing: ['natural', 'even'],
+  chatStyle: ['twitch-dark', 'twitch-light', 'transparent', 'custom'],
+  fontSize: ['small', 'default', 'large', 'xlarge'],
+  animation: ['instant', 'slide-up', 'slide-left', 'slide-right', 'fade', 'pop', 'slide-fade', 'slide'],
+  exportFormat: ['png-seq', 'webm-alpha', 'mov-prores', 'mp4', 'webm'],
+  framePreset: ['chat', '1080p', '1440p', '4k', 'vertical', 'custom'],
+  anchor: ['tl', 't', 'tr', 'l', 'c', 'r', 'bl', 'b', 'br'],
+}
+
 export function sanitize(p: Partial<Config> | null | undefined): Partial<Config> {
   const out: Partial<Config> = {}
   if (!p) return out
@@ -40,7 +53,8 @@ export function sanitize(p: Partial<Config> | null | undefined): Partial<Config>
     if (!(k in p)) continue
     const d = DEFAULT_CONFIG[k]
     const v = p[k]
-    const ok = Array.isArray(d) ? Array.isArray(v) : typeof v === typeof d && v !== null && (typeof d !== 'number' || Number.isFinite(v as number))
+    let ok = Array.isArray(d) ? Array.isArray(v) : typeof v === typeof d && v !== null && (typeof d !== 'number' || Number.isFinite(v as number))
+    if (ok && ENUMS[k] && !ENUMS[k]!.includes(v as string)) ok = false
     if (ok) (out as Record<string, unknown>)[k] = v
   }
   return out
@@ -102,9 +116,8 @@ export function useConfig() {
         history.replaceState(null, '', location.pathname + location.search)
         if (p) {
           const existing = localStorage.getItem(STORAGE_KEY)
-          const apply = !existing || confirm('Open the shared TwitchSim settings? Your current settings will be replaced (a backup is kept until you change something).')
+          const apply = !existing || confirm('Open the shared TwitchSim settings? Your current settings will be replaced (Save preset first if you want to keep them).')
           if (apply) {
-            if (existing) localStorage.setItem(STORAGE_KEY + '.backup', existing)
             return { ...base, ...sanitize(p) }
           }
         }

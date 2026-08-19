@@ -32,6 +32,7 @@ export function AEPanel({ cfg, set, patch, timeline, assets }: { cfg: Config; se
   const [progress, setProgress] = useState<AEProgress | null>(null)
   const [result, setResult] = useState<AEBuildResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [note, setNote] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const geo = computeGeometry(cfg)
   // the length only follows the lines when there are ordered lines
@@ -62,6 +63,7 @@ export function AEPanel({ cfg, set, patch, timeline, assets }: { cfg: Config; se
   const start = async () => {
     setError(null)
     setResult(null)
+    setNote(null)
     const ac = new AbortController()
     abortRef.current = ac
     setProgress({ phase: 'assets', done: 0, total: 1, message: 'Starting…' })
@@ -92,10 +94,12 @@ export function AEPanel({ cfg, set, patch, timeline, assets }: { cfg: Config; se
   }
 
   const removeBuild = async () => {
-    if (!confirm(`Remove the "${compName}" build (folder, comp and footage) from the project?`)) return
+    if (!confirm(`Remove the "${compName}" build from the project? Its comp, message precomps and imported badge/emote footage go (layers in other comps that use that footage go with it); anything of yours inside the folder stays.`)) return
     try {
-      await callHost('remove', { buildKey: buildKeyFor(compName) })
+      const r = await callHost<{ removed: boolean }>('remove', { buildKey: buildKeyFor(compName) })
       setResult(null)
+      setError(null)
+      setNote(r.removed ? `Removed the "${compName}" build (comp, messages, footage).` : `Nothing to remove — there is no "${compName}" build in this project.`)
     } catch (e) {
       setError((e as Error).message)
     }
@@ -105,7 +109,7 @@ export function AEPanel({ cfg, set, patch, timeline, assets }: { cfg: Config; se
 
   return (
     <>
-      <Section title="Comp" hint="Builds the current chat as real AE layers: one precomp per message, text & shape layers, badge/emote footage and one keyframed “Scroll” null.">
+      <Section title="Comp" hint="Builds the current chat as real AE layers: a “TwitchSim Controls” null with the live controls, one precomp per message (text & shape layers, badge/emote footage) and a “Scroll” null.">
         <p className="hint">
           {host ? `After Effects ${host.version}` : 'After Effects'}
           {info ? (info.projectPath ? ` · project “${info.projectName}”` : ' · project not saved yet (save it so the images live next to it)') : infoErr ? ` · ${infoErr}` : ' · connecting…'}
@@ -201,6 +205,7 @@ export function AEPanel({ cfg, set, patch, timeline, assets }: { cfg: Config; se
           </p>
         )}
         {error && <p className="err">{error}</p>}
+        {note && !result && !error && <p className="hint">{note}</p>}
         <div className="btns">
           <button type="button" className="btn small" onClick={removeBuild} disabled={running}>
             Remove this build from the project
@@ -214,7 +219,7 @@ export function AEPanel({ cfg, set, patch, timeline, assets }: { cfg: Config; se
             <b>Main comp</b>: <i>TwitchSim Controls</i> (null, top layer — everything is parented to it: move / scale / rotate it to place the whole chat), <i>Chat area</i> (matte), one layer per message named <code>msg 012 · username</code>, <i>Scroll</i> (null — the stack's push-ups: hold keys + an expression) and <i>Background</i>.
           </li>
           <li>
-            <b>Effect Controls of the Controls null</b> (all keyframable, wired to the layers with expressions — no rebuild): <b>Animation ·</b> Style (dropdown: instant / slide up / slide up + fade / fade / slide from left / right / pop), Duration, Ease out, Slide distance, Pop from — every message reads them at the moment it arrives, so a keyframed Duration changes how <i>later</i> messages come in; <b>Layout ·</b> Row gap; <b>Look ·</b> Opacity, custom text & name colour, Outline, Shadow (+ softness / distance), Background colour / opacity / corners, Top fade. Prefixes group them (AE has no folders in Effect Controls).
+            <b>Effect Controls of the Controls null</b> (all keyframable, wired to the layers with expressions — no rebuild): <b>Animation ·</b> Style (dropdown: instant / slide up / slide up + fade / fade / slide from left / right / pop), Duration (frames), Ease out, Slide distance (% of the chat width), Pop from — every message reads them at the moment it arrives, so a keyframed Duration changes how <i>later</i> messages come in; <b>Layout ·</b> Row gap; <b>Look ·</b> Opacity, custom text & name colour, Outline, Shadow (+ softness / distance), Background colour / opacity / corners, Top fade (% of the chat height). Prefixes group them (AE has no folders in Effect Controls). Rebuilding keeps the null and everything you changed on it (values, keyframes, its transform); controls you never touched follow the panel's new settings.
           </li>
           <li>
             <b>Pace of the chat</b> (messages per minute) is timing, not animation: change it in the panel and rebuild, or nest this comp and time-remap / time-stretch it.

@@ -14,7 +14,7 @@ import { buildTimeline } from '../core/simulation'
 import { generateSubBadgeSet } from '../core/badges'
 import { Rng } from '../core/rng'
 import { loadChannel, type ChannelData } from '../core/channel'
-import { ensureFonts, onFontsChanged } from '../core/fonts'
+import { ensureFonts, onFontsChanged, timelineText } from '../core/fonts'
 import type { Config } from '../core/types'
 import { DEFAULT_CONFIG } from '../core/defaults'
 import { makeFrameSource } from '../export/exporter'
@@ -114,6 +114,7 @@ export default function App() {
     // snapshot(tMs) renders one frame with the export pipeline (handy for debugging / tests)
     const snapshot = async (tMs: number) => {
       const c = { ...cfg, exportFormat: 'png-seq' as const }
+      await ensureFonts(c.fontFamily, timelineText(timeline))
       await assets.loadAll(collectAssetUrls(timeline, c.exportScale > 1.25, styleFromConfig(c)))
       const src = makeFrameSource(c, timeline, assets)
       src.render(Math.round((tMs / 1000) * cfg.exportFps))
@@ -135,7 +136,7 @@ export default function App() {
   // keyboard shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return // leave browser shortcuts (Cmd+R, Cmd+N…) alone
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return // leave browser shortcuts (Cmd+R, Cmd+N…) alone; no auto-repeat
       const el = e.target as HTMLElement
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return
       if (e.code === 'Space') {
