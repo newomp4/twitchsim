@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import type { Config } from '../../core/types'
-import { prepareBadge, prepareEmote, refitBadge, REPLACEABLE_SETS, type CustomBadge, type BadgeFit } from '../../core/customAssets'
+import { prepareBadge, prepareEmote, prepareAvatar, refitBadge, REPLACEABLE_SETS, type CustomBadge, type BadgeFit } from '../../core/customAssets'
 import { Collapsible, Slider, Toggle, Row, Segmented, Field } from '../controls'
 
 const SUB_TIER_DEFAULTS = [1, 3, 6, 9, 12, 18, 24, 36, 48, 60]
@@ -10,6 +10,7 @@ export function CustomIcons({ cfg, set, patch }: { cfg: Config; set: <K extends 
   const repRef = useRef<HTMLInputElement>(null)
   const extraRef = useRef<HTMLInputElement>(null)
   const emoteRef = useRef<HTMLInputElement>(null)
+  const avatarRef = useRef<HTMLInputElement>(null)
   const [replaceSet, setReplaceSet] = useState('moderator')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -71,6 +72,21 @@ export function CustomIcons({ cfg, set, patch }: { cfg: Config; set: <K extends 
       setBusy(false)
     }
   }
+  const addAvatars = async (files: FileList | null) => {
+    if (!files?.length) return
+    setBusy(true)
+    setErr(null)
+    try {
+      const added = []
+      for (const f of Array.from(files)) added.push(await prepareAvatar(f))
+      patch({ customAvatars: [...cfg.customAvatars, ...added], avatarMode: cfg.avatarMode === 'off' ? 'all' : cfg.avatarMode })
+    } catch (e) {
+      setErr((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const changeFit = async (fit: BadgeFit) => {
     setBusy(true)
     try {
@@ -82,7 +98,7 @@ export function CustomIcons({ cfg, set, patch }: { cfg: Config; set: <K extends 
   }
 
   return (
-    <Collapsible title="Your own icons" hint={badges.length + cfg.customEmotes.length ? `${badges.length} badge${badges.length === 1 ? '' : 's'}, ${cfg.customEmotes.length} emote${cfg.customEmotes.length === 1 ? '' : 's'} uploaded` : 'sub badges, custom emotes, replace a Twitch badge'}>
+    <Collapsible title="Your own icons" hint={badges.length + cfg.customEmotes.length + cfg.customAvatars.length ? `${badges.length} badge${badges.length === 1 ? '' : 's'}, ${cfg.customEmotes.length} emote${cfg.customEmotes.length === 1 ? '' : 's'}, ${cfg.customAvatars.length} avatar${cfg.customAvatars.length === 1 ? '' : 's'}` : 'sub badges, emotes, avatars, replace a Twitch badge'}>
       <p className="hint">Upload any image — it's fitted into Twitch's square badge box for you and the corners are rounded (adjustable). PNG with transparency looks best; JPG/GIF/WebP/SVG also work.</p>
       <Row>
         <Field label="Fit uploads">
@@ -205,15 +221,49 @@ export function CustomIcons({ cfg, set, patch }: { cfg: Config; set: <K extends 
           </>
         )}
       </div>
+      <div className="upl-block">
+        <div className="upl-head">
+          <b>Chatter avatars</b>
+          <span className="hint">Profile pictures shown before the badges. Upload images, then choose who gets one.</span>
+          <button type="button" className="btn small" disabled={busy} onClick={() => avatarRef.current?.click()}>
+            Upload…
+          </button>
+          <input ref={avatarRef} type="file" accept="image/*" multiple hidden onChange={(e) => void addAvatars(e.target.files).then(() => (e.target.value = ''))} />
+        </div>
+        {cfg.customAvatars.length > 0 && (
+          <>
+            <Row>
+              <Field label="Who gets an avatar">
+                <Segmented value={cfg.avatarMode} onChange={(v) => set('avatarMode', v)} options={[{ value: 'off', label: 'Nobody' }, { value: 'assigned', label: 'Only assigned' }, { value: 'all', label: 'Everybody' }]} />
+              </Field>
+              <Field label="Shape">
+                <Segmented value={cfg.avatarShape} onChange={(v) => set('avatarShape', v)} options={[{ value: 'circle', label: 'Circle' }, { value: 'rounded', label: 'Rounded' }, { value: 'square', label: 'Square' }]} />
+              </Field>
+            </Row>
+            <p className="hint">Type a username next to an avatar to pin it to that chatter. Leave it blank to add it to the random pool (used when “Everybody” is on).</p>
+            <div className="upl-list">
+              {cfg.customAvatars.map((a) => (
+                <div key={a.id} className="upl-item">
+                  <img src={a.src} alt="" className="avatar-thumb" style={{ borderRadius: cfg.avatarShape === 'circle' ? '50%' : cfg.avatarShape === 'rounded' ? '25%' : '2px' }} />
+                  <input type="text" value={a.login} onChange={(ev) => set('customAvatars', cfg.customAvatars.map((x) => (x.id === a.id ? { ...x, login: ev.target.value.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase() } : x)))} placeholder="username (optional)" />
+                  <button type="button" className="x" title="Remove" aria-label="Remove" onClick={() => set('customAvatars', cfg.customAvatars.filter((x) => x.id !== a.id))}>
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
       {busy && <p className="hint">Processing…</p>}
       {err && <p className="err">{err}</p>}
-      {(badges.length > 0 || cfg.customEmotes.length > 0) && (
+      {(badges.length > 0 || cfg.customEmotes.length > 0 || cfg.customAvatars.length > 0) && (
         <button
           type="button"
           className="btn small"
           onClick={() => {
-            if (!confirm('Remove all uploaded badges and emotes?')) return
-            patch({ customBadges: [], customEmotes: [], channelSubBadgeStyle: cfg.channelSubBadgeStyle === 'custom' ? 'generated' : cfg.channelSubBadgeStyle })
+            if (!confirm('Remove all uploaded badges, emotes and avatars?')) return
+            patch({ customBadges: [], customEmotes: [], customAvatars: [], channelSubBadgeStyle: cfg.channelSubBadgeStyle === 'custom' ? 'generated' : cfg.channelSubBadgeStyle })
           }}
         >
           Remove all uploads

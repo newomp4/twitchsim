@@ -20,7 +20,7 @@ function unb64url(s: string): Uint8Array {
 export function encodeShare(cfg: Config): string {
   const diff: Partial<Config> = {}
   for (const k of Object.keys(cfg) as (keyof Config)[]) {
-    if (k === 'customBadges' || k === 'customEmotes') continue // images don't fit in a URL
+    if (k === 'customBadges' || k === 'customEmotes' || k === 'customAvatars') continue // images don't fit in a URL
     if (cfg[k] !== DEFAULT_CONFIG[k]) (diff as Record<string, unknown>)[k] = cfg[k]
   }
   return b64url(deflateSync(strToU8(JSON.stringify(diff)), { level: 9 }))
@@ -46,6 +46,8 @@ const ENUMS: Partial<Record<keyof Config, readonly string[]>> = {
   anchor: ['tl', 't', 'tr', 'l', 'c', 'r', 'bl', 'b', 'br'],
   easePreset: ['smooth', 'ease-out', 'gentle', 'linear', 'snappy', 'custom'],
   nameColorMode: ['twitch', 'custom'],
+  avatarMode: ['off', 'assigned', 'all'],
+  avatarShape: ['circle', 'rounded', 'square'],
 }
 
 export function sanitize(p: Partial<Config> | null | undefined): Partial<Config> {
@@ -100,8 +102,8 @@ async function idbSet(key: string, value: unknown): Promise<void> {
   })
 }
 
-function withoutImages(cfg: Config): Omit<Config, 'customBadges' | 'customEmotes'> {
-  const { customBadges: _b, customEmotes: _e, ...rest } = cfg
+function withoutImages(cfg: Config): Omit<Config, 'customBadges' | 'customEmotes' | 'customAvatars'> {
+  const { customBadges: _b, customEmotes: _e, customAvatars: _a, ...rest } = cfg
   void _b
   void _e
   return rest
@@ -136,7 +138,7 @@ export function useConfig() {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const imgs = await idbGet<Partial<Pick<Config, 'customBadges' | 'customEmotes'>>>('images')
+      const imgs = await idbGet<Partial<Pick<Config, 'customBadges' | 'customEmotes' | 'customAvatars'>>>('images')
       if (cancelled) return
       const p = sanitize(imgs ?? {})
       // don't clobber uploads the user made in the meantime
@@ -150,6 +152,7 @@ export function useConfig() {
   const saveTimer = useRef<number | null>(null)
   const lastBadges = useRef<Config['customBadges'] | null>(null)
   const lastEmotes = useRef<Config['customEmotes'] | null>(null)
+  const lastAvatars = useRef<Config['customAvatars'] | null>(null)
   const cfgRef = useRef(cfg)
   cfgRef.current = cfg
   const flush = useCallback(() => {
@@ -160,10 +163,11 @@ export function useConfig() {
       console.warn('TwitchSim: could not save settings', e)
     }
     // images: written when the arrays change identity (every edit replaces them), once the restore is done
-    if (imagesRestored.current && (c.customBadges !== lastBadges.current || c.customEmotes !== lastEmotes.current)) {
+    if (imagesRestored.current && (c.customBadges !== lastBadges.current || c.customEmotes !== lastEmotes.current || c.customAvatars !== lastAvatars.current)) {
       lastBadges.current = c.customBadges
       lastEmotes.current = c.customEmotes
-      void idbSet('images', { customBadges: c.customBadges, customEmotes: c.customEmotes })
+      lastAvatars.current = c.customAvatars
+      void idbSet('images', { customBadges: c.customBadges, customEmotes: c.customEmotes, customAvatars: c.customAvatars })
     }
   }, [])
   useEffect(() => {
@@ -199,7 +203,7 @@ const SIM_KEYS: (keyof Config)[] = [
   'seed', 'mode', 'script', 'mood', 'streamerName', 'streamerLogin', 'viewerName', 'gameName', 'scriptUsersRandom', 'scriptGapMultiplier', 'fillerFromScript', 'streamerChats', 'streamerColor',
   'messagesPerMinute', 'pacing', 'burstiness', 'reactionMoments', 'startDelayMs', 'prefillSec', 'durationSec', 'durationAuto', 'tailSec',
   'subsRate', 'giftsRate', 'raidsRate', 'cheersRate', 'firstTimeRate', 'highlightRate', 'replyRate', 'deleteRate', 'announcementRate', 'actionsRate', 'mentionsRate', 'powerUpsRate', 'rewardRate', 'systemNotices', 'welcomeMessage',
-  'chatterPoolSize', 'customColorRatio', 'subRatio', 'primeRatio', 'modCount', 'vipCount', 'bitsBadgeRatio', 'gifterBadgeRatio', 'eventBadgeRatio', 'badgePool', 'botsEnabled', 'customNames', 'customNamesOnly', 'localizedNamesRatio', 'channelSubBadgeStyle', 'customBadges', 'customEmotes', 'badgeFit', 'useCustomEmotesInFiller',
+  'chatterPoolSize', 'customColorRatio', 'subRatio', 'primeRatio', 'modCount', 'vipCount', 'bitsBadgeRatio', 'gifterBadgeRatio', 'eventBadgeRatio', 'badgePool', 'botsEnabled', 'customNames', 'customNamesOnly', 'localizedNamesRatio', 'channelSubBadgeStyle', 'customBadges', 'customEmotes', 'customAvatars', 'avatarMode', 'avatarShape', 'badgeFit', 'useCustomEmotesInFiller',
   'emoteDensity', 'useTwitchEmotes', 'use7tvEmotes', 'useChannelEmotes', 'animatedEmotes',
 ]
 export function simKey(cfg: Config): string {
@@ -208,6 +212,7 @@ export function simKey(cfg: Config): string {
     SIM_KEYS.map((k) => {
       if (k === 'customBadges') return cfg.customBadges.map((b) => [b.id, b.kind, b.name, b.months, b.set, b.ratio])
       if (k === 'customEmotes') return cfg.customEmotes.map((e) => [e.id, e.name, e.animated])
+      if (k === 'customAvatars') return cfg.customAvatars.map((a) => [a.id, a.name, a.login])
       return cfg[k]
     }),
   )

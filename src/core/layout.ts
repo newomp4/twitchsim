@@ -37,6 +37,8 @@ export interface RenderStyle {
   badgeRadius: number
   /** uploaded images replacing Twitch badge sets: set -> data url */
   badgeOverrides: Record<string, string>
+  /** chatter avatars: assigned by login, or a pool hashed from the login when mode = 'all' */
+  avatars: { mode: 'off' | 'assigned' | 'all'; shape: 'circle' | 'rounded' | 'square'; byLogin: Record<string, string>; pool: string[] }
 }
 
 export const FONT_PRESETS: Record<Config['fontSize'], { size: number; line: number }> = {
@@ -91,6 +93,7 @@ export function styleFromConfig(cfg: Config): RenderStyle {
     animatedEmotes: cfg.animatedEmotes,
     badgeRadius: cfg.badgeRadius,
     badgeOverrides: Object.fromEntries(cfg.customBadges.filter((b) => b.kind === 'replace' && b.set).map((b) => [b.set!, b.src])),
+    avatars: buildAvatars(cfg),
   }
 }
 
@@ -184,7 +187,7 @@ export type Atom =
   | { kind: 'text'; text: string; w: number; style: TextStyle; above: number; below: number; body?: boolean }
   | { kind: 'space'; w: number; style: TextStyle; above: number; below: number; body?: boolean }
   | { kind: 'gap'; w: number; body?: boolean }
-  | { kind: 'image'; url: string; urlHi: string; w: number; h: number; boxW: number; above: number; below: number; role: 'emote' | 'badge' | 'cheer' | 'icon'; name: string; fallback?: string; iconColor?: string; iconPath?: string; alpha?: number; body?: boolean; round?: number }
+  | { kind: 'image'; url: string; urlHi: string; w: number; h: number; boxW: number; above: number; below: number; role: 'emote' | 'badge' | 'cheer' | 'icon' | 'avatar'; name: string; fallback?: string; iconColor?: string; iconPath?: string; alpha?: number; body?: boolean; round?: number }
   | { kind: 'group'; atoms: Atom[]; w: number; above: number; below: number }
   | { kind: 'br' }
 
@@ -361,6 +364,37 @@ export const ICONS = {
 function nameColor(login: string, custom: string | null, style: RenderStyle): string {
   const base = custom || defaultColorFor(login, style.nameColorPalette)
   return style.readableColors ? readableColor(base, style.theme) : base
+}
+
+function buildAvatars(cfg: Config): RenderStyle['avatars'] {
+  const byLogin: Record<string, string> = {}
+  const pool: string[] = []
+  for (const a of cfg.customAvatars ?? []) {
+    if (!a.src) continue
+    if (a.login) byLogin[a.login.toLowerCase()] = a.src
+    else pool.push(a.src)
+  }
+  // no un-assigned images but "everyone" is wanted: draw the whole set into the pool
+  if (!pool.length && cfg.avatarMode === 'all') for (const a of cfg.customAvatars ?? []) if (a.src) pool.push(a.src)
+  return { mode: cfg.avatarMode ?? 'off', shape: cfg.avatarShape ?? 'circle', byLogin, pool }
+}
+
+/** The avatar image (data URL) for a chatter, or null. Deterministic: a login always gets the same one. */
+export function avatarFor(login: string, style: RenderStyle): string | null {
+  const av = style.avatars
+  if (!av || av.mode === 'off') return null
+  const own = av.byLogin[login.toLowerCase()]
+  if (own) return own
+  if (av.mode === 'all' && av.pool.length) {
+    let h = 0
+    for (let i = 0; i < login.length; i++) h = (h * 31 + login.charCodeAt(i)) >>> 0
+    return av.pool[h % av.pool.length]
+  }
+  return null
+}
+
+function avatarRound(shape: 'circle' | 'rounded' | 'square'): number {
+  return shape === 'circle' ? 0.5 : shape === 'rounded' ? 0.25 : 0
 }
 
 function isSystemKind(kind?: string): boolean {
@@ -591,6 +625,26 @@ function chatLineAtoms(msg: ChatMessage, env: LayoutEnv, fm: FontMetrics, delete
   }
   // badges + name group (inline-block => unbreakable)
   const group: Atom[] = []
+  // avatar (before the badges), if one is assigned to this chatter
+  const avatarSrc = avatarFor(user.login, style)
+  if (avatarSrc) {
+    const d = 24 * scale
+    group.push({
+      kind: 'image',
+      url: avatarSrc,
+      urlHi: avatarSrc,
+      w: d,
+      h: d,
+      boxW: d,
+      // vertically centred on the text's x-height midline (like a badge, but no badge nudge)
+      above: fm.xHeight / 2 + d / 2,
+      below: d / 2 - fm.xHeight / 2,
+      role: 'avatar',
+      name: 'avatar',
+      round: avatarRound(style.avatars.shape),
+    })
+    group.push({ kind: 'gap', w: 5 * scale })
+  }
   if (style.showBadges) {
     const bsz = 18 * scale
     for (const b of userBadges) {

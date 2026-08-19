@@ -34,6 +34,7 @@ Everything runs in the browser. Nothing is uploaded anywhere.
 - Any **height** (a few lines or the whole screen), width, font scale, timestamps, alternating rows,
   **entry animations** (instant like Twitch, slide up, slide in from the left/right, fade, pop, slide+fade) with a **custom easing curve** (presets, a cubic-bézier editor, or paste "Adobe After Effects 9.0 Keyframe Data" to copy an exact curve), transparent overlay style with text shadow/outline, fade-out at the top edge.
 - **Username colours**: Twitch's 15 default colours (hashed from each login, like Twitch) or your own **custom palette**; "Readable colors" applies Twitch's CIELAB brightening; give a specific user an exact colour with `[color:#hex]`.
+- **Chatter avatars**: upload profile pictures shown before the badges — circle / rounded / square, pinned to specific usernames or handed out from a pool to everyone.
 
 **Export**
 - **WebM VP9 + alpha** (fast, ~18 fps at 4K), **MOV ProRes 4444 + alpha** (Premiere / After Effects / Final Cut / Resolve / CapCut),

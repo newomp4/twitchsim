@@ -27,6 +27,15 @@ export interface CustomEmote {
   animated: boolean
 }
 
+export interface CustomAvatar {
+  id: string
+  name: string
+  /** square, center-cropped image (data URL) shown before the badges/name */
+  src: string
+  /** assign to this exact login (lowercase); empty = part of the random pool */
+  login: string
+}
+
 export const BADGE_SIZE = 144
 const ORIG_MAX = 320
 
@@ -107,6 +116,15 @@ export async function prepareBadge(file: File, fit: BadgeFit, kind: CustomBadge[
 
 export async function refitBadge(b: CustomBadge, fit: BadgeFit): Promise<CustomBadge> {
   return { ...b, src: await fitSquare(b.orig, fit) }
+}
+
+const AVATAR_SIZE = 192
+export async function prepareAvatar(file: File, login = ''): Promise<CustomAvatar> {
+  const raw = await fileToDataUrl(file)
+  const orig = await downscale(raw, AVATAR_SIZE)
+  const src = await fitSquare(orig, 'cover', AVATAR_SIZE)
+  const base = file.name.replace(/\.[^.]+$/, '')
+  return { id: newId(), name: base, src, login: login.trim().toLowerCase() }
 }
 
 export async function prepareEmote(file: File): Promise<CustomEmote> {

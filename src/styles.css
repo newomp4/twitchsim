@@ -215,3 +215,5 @@ kbd { background: var(--card2); border: 1px solid var(--border2); border-radius:
 .ease-curve .ease-diag { fill: none; stroke: var(--border2); stroke-width: 1; stroke-dasharray: 3 3; }
 .ease-curve .ease-path { fill: none; stroke: var(--accent); stroke-width: 2; }
 textarea.ta.small { min-height: 70px; }
+
+.avatar-thumb { width: 26px; height: 26px; object-fit: cover; border: 1px solid var(--border2); }

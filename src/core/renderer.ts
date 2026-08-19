@@ -1,7 +1,7 @@
 import type { AnimationStyle, ChatMessage } from './types'
 import type { Timeline } from './simulation'
 import { AssetCache, frameAt } from './assets'
-import { layoutMessage, type Atom, type RenderStyle, type RowLayout, type LineBox, type Block, type TextStyle } from './layout'
+import { layoutMessage, type Atom, type RenderStyle, type RowLayout, type LineBox, type Block, type TextStyle, avatarFor } from './layout'
 
 export type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 
@@ -447,6 +447,10 @@ export function drawEffect(ctx: Ctx2D, effect: NonNullable<ChatMessage['effect']
 export function collectAssetUrls(tl: Timeline, hiRes: boolean, style: RenderStyle): string[] {
   const urls = new Set<string>()
   for (const m of tl.messages) {
+    if (m.user) {
+      const av = avatarFor(m.user.login, style)
+      if (av) urls.add(av)
+    }
     if (m.user && style.showBadges) {
       for (const b of m.badges ?? m.user.badges) {
         const ov = style.badgeOverrides[b.set]

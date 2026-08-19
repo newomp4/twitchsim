@@ -1,4 +1,4 @@
-import type { CustomBadge, CustomEmote } from './customAssets'
+import type { CustomBadge, CustomEmote, CustomAvatar } from './customAssets'
 
 export type Theme = 'dark' | 'light'
 
@@ -203,6 +203,10 @@ export interface Config {
   /** uploaded badge images (see customAssets.ts) */
   customBadges: CustomBadge[]
   customEmotes: CustomEmote[]
+  /** uploaded avatar / profile images shown before the badges & name */
+  customAvatars: CustomAvatar[]
+  avatarMode: 'off' | 'assigned' | 'all'
+  avatarShape: 'circle' | 'rounded' | 'square'
   /** corner radius for uploaded badges, as a fraction of the badge size (0 = square, 0.5 = circle) */
   badgeRadius: number
   badgeFit: 'cover' | 'contain'
