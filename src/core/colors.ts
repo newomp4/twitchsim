@@ -25,6 +25,7 @@ export const DEFAULT_NAME_COLORS = [
  */
 export function defaultColorFor(login: string, palette?: readonly string[] | null): string {
   const pal = palette && palette.length ? palette : DEFAULT_NAME_COLORS
+  if (!login) return pal[0]
   const n = login.charCodeAt(0) + login.charCodeAt(login.length - 1)
   return pal[n % pal.length]
 }
@@ -44,7 +45,7 @@ export const POPULAR_CUSTOM_COLORS = [
 ]
 
 export function hexToRgb(hex: string): [number, number, number] {
-  let h = hex.replace('#', '').trim()
+  let h = String(hex).replace('#', '').trim()
   if (h.length === 4) h = h.slice(0, 3) // #rgba → drop alpha
   if (h.length === 3) h = h.split('').map((c) => c + c).join('')
   if (h.length === 8) h = h.slice(0, 6) // #rrggbbaa → drop alpha

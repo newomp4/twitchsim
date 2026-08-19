@@ -80,8 +80,9 @@ export function parseKeyframeData(text: string): number[] | null {
   if (!text || !/Keyframe Data/i.test(text)) return null
   const pts: { x: number; y: number }[] = []
   for (const raw of text.split(/\r?\n/)) {
-    // a keyframe row is "<frame>\t<value>" (value may be the first of several dimensions — use dim 0)
-    const m = raw.match(/^\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*$/)
+    // a keyframe row is "<frame>\t<value>[\t<value2>…]" — 2D/3D properties (Position, Scale) have extra
+    // columns; use the frame and the first value
+    const m = raw.match(/^\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)(?:\s|$)/)
     if (!m) continue
     const x = parseFloat(m[1])
     const y = parseFloat(m[2])

@@ -203,7 +203,7 @@ const SIM_KEYS: (keyof Config)[] = [
   'seed', 'mode', 'script', 'mood', 'streamerName', 'streamerLogin', 'viewerName', 'gameName', 'scriptUsersRandom', 'scriptGapMultiplier', 'fillerFromScript', 'streamerChats', 'streamerColor',
   'messagesPerMinute', 'pacing', 'burstiness', 'reactionMoments', 'startDelayMs', 'prefillSec', 'durationSec', 'durationAuto', 'tailSec',
   'subsRate', 'giftsRate', 'raidsRate', 'cheersRate', 'firstTimeRate', 'highlightRate', 'replyRate', 'deleteRate', 'announcementRate', 'actionsRate', 'mentionsRate', 'powerUpsRate', 'rewardRate', 'systemNotices', 'welcomeMessage',
-  'chatterPoolSize', 'customColorRatio', 'subRatio', 'primeRatio', 'modCount', 'vipCount', 'bitsBadgeRatio', 'gifterBadgeRatio', 'eventBadgeRatio', 'badgePool', 'botsEnabled', 'customNames', 'customNamesOnly', 'localizedNamesRatio', 'channelSubBadgeStyle', 'customBadges', 'customEmotes', 'customAvatars', 'avatarMode', 'avatarShape', 'badgeFit', 'useCustomEmotesInFiller',
+  'chatterPoolSize', 'customColorRatio', 'subRatio', 'primeRatio', 'modCount', 'vipCount', 'bitsBadgeRatio', 'gifterBadgeRatio', 'eventBadgeRatio', 'badgePool', 'botsEnabled', 'customNames', 'customNamesOnly', 'localizedNamesRatio', 'nameColorMode', 'channelSubBadgeStyle', 'customBadges', 'customEmotes', 'badgeFit', 'useCustomEmotesInFiller',
   'emoteDensity', 'useTwitchEmotes', 'use7tvEmotes', 'useChannelEmotes', 'animatedEmotes',
 ]
 export function simKey(cfg: Config): string {
@@ -212,7 +212,6 @@ export function simKey(cfg: Config): string {
     SIM_KEYS.map((k) => {
       if (k === 'customBadges') return cfg.customBadges.map((b) => [b.id, b.kind, b.name, b.months, b.set, b.ratio])
       if (k === 'customEmotes') return cfg.customEmotes.map((e) => [e.id, e.name, e.animated])
-      if (k === 'customAvatars') return cfg.customAvatars.map((a) => [a.id, a.name, a.login])
       return cfg[k]
     }),
   )

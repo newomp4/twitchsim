@@ -26,7 +26,7 @@ function EaseControl({ cfg, set, patch }: { cfg: Config; set: <K extends keyof C
           <Select
             label=""
             value={cfg.easeKeyframes ? ('custom' as typeof cfg.easePreset) : cfg.easePreset}
-            onChange={(v) => patch(v === cfg.easePreset ? {} : { easePreset: v, easeKeyframes: '' })}
+            onChange={(v) => patch({ easePreset: v, easeKeyframes: '' })}
             options={EASE_PRESET_LABELS}
           />
         </Field>
@@ -211,6 +211,7 @@ export function StylePanel({
               + colour
             </button>
             {cfg.nameColorPalette.length === 0 && <span className="fhint">Add at least one colour.</span>}
+            {cfg.readableColors && <span className="fhint">“Readable colors” (below) adjusts these for legibility — turn it off for the exact hex.</span>}
           </div>
         )}
         <Slider label="Share who pick a custom colour (Twitch mode)" value={cfg.customColorRatio} min={0} max={1} step={0.02} onChange={(v) => set('customColorRatio', v)} format={pct} hint="in Twitch mode, how many chatters set their own colour (Prime/Turbo) instead of a default" />

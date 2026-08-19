@@ -205,7 +205,7 @@ kbd { background: var(--card2); border: 1px solid var(--border2); border-radius:
 .palette .swatch { position: relative; display: inline-flex; }
 .palette .swatch input[type=color] { width: 30px; height: 28px; padding: 0; border: 1px solid var(--border2); background: var(--card); border-radius: var(--radius-sm); cursor: pointer; }
 .palette .swatch .x { position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; line-height: 14px; padding: 0; border-radius: 999px; border: 1px solid var(--border2); background: var(--bg); color: var(--muted2); font-size: 12px; cursor: pointer; display: none; }
-.palette .swatch:hover .x { display: block; }
+.palette .swatch:hover .x, .palette .swatch:focus-within .x { display: block; }
 .palette .swatch .x:hover { color: var(--text); border-color: var(--muted); }
 
 .ease { margin: 2px 0 4px; }
