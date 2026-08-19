@@ -174,6 +174,8 @@ export interface TextStyle {
   bg?: { color: string; padX: number; padY: number; radius: number }
   /** opacity multiplier */
   alpha?: number
+  /** what the run is (the AE build hangs its live colour overrides on this) */
+  role?: 'name' | 'body'
 }
 
 export type Atom =
@@ -611,10 +613,10 @@ function chatLineAtoms(msg: ChatMessage, env: LayoutEnv, fm: FontMetrics, delete
       group.push({ kind: 'gap', w: 3 * scale })
     }
   }
-  const nameStyle: TextStyle = { font: fontString(style.boldNames ? 700 : 400, fs, style.fontFamily), color }
+  const nameStyle: TextStyle = { font: fontString(style.boldNames ? 700 : 400, fs, style.fontFamily), color, role: 'name' }
   group.push({ kind: 'text', text: user.displayName, w: measure(user.displayName, nameStyle.font), style: nameStyle, above, below })
   if (user.displayName.toLowerCase() !== user.login && !/^[a-z0-9_]+$/i.test(user.displayName)) {
-    const intl: TextStyle = { font: fontString(400, fs, style.fontFamily), color, alpha: 0.6 }
+    const intl: TextStyle = { font: fontString(400, fs, style.fontFamily), color, alpha: 0.6, role: 'name' }
     const t = ` (${user.login})`
     group.push({ kind: 'text', text: t, w: measure(t, intl.font), style: intl, above, below })
   }
@@ -622,9 +624,9 @@ function chatLineAtoms(msg: ChatMessage, env: LayoutEnv, fm: FontMetrics, delete
   atoms.push({ kind: 'group', atoms: group, w: gw, above: Math.max(...group.map((a) => ('above' in a ? a.above : 0))), below: Math.max(...group.map((a) => ('below' in a ? a.below : 0))) })
 
   const bodyColor = deleted ? c.deleted : msg.action ? color : msg.highlighted ? '#ffffff' : c.text
-  const bodyStyle: TextStyle = { font: fontString(400, fs, style.fontFamily), color: bodyColor, italic: deleted }
+  const bodyStyle: TextStyle = { font: fontString(400, fs, style.fontFamily), color: bodyColor, italic: deleted, role: 'body' }
   if (!msg.action) {
-    atoms.push({ kind: 'text', text: ':', w: measure(':', bodyStyle.font), style: { font: bodyStyle.font, color: msg.highlighted ? '#ffffff' : c.text }, above, below })
+    atoms.push({ kind: 'text', text: ':', w: measure(':', bodyStyle.font), style: { font: bodyStyle.font, color: msg.highlighted ? '#ffffff' : c.text, role: 'body' }, above, below })
   }
   atoms.push({ kind: 'space', w: measure(' ', bodyStyle.font), style: bodyStyle, above, below })
 

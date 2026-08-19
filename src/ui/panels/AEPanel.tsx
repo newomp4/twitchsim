@@ -192,7 +192,12 @@ export function AEPanel({ cfg, set, patch, timeline, assets }: { cfg: Config; se
         )}
         {result && (
           <p className="hint">
-            ✓ <b>{result.compName}</b> — {result.messages} messages, {result.layers} layers in the main comp, {result.stats.keys} keyframes, {result.files} image files{result.reattached ? `, ${result.reattached} of your layers re-parented` : ''}. The comp is open in the viewer.
+            ✓ <b>{result.compName}</b> — {result.messages} messages, {result.layers} layers in the main comp, {result.stats.keys} keyframes, {result.files} image files{result.reattached ? `, ${result.reattached} of your layers re-parented` : ''}. The comp is open in the viewer — select <b>TwitchSim Controls</b> (top layer) for the live controls.
+          </p>
+        )}
+        {result && result.textControls === false && (
+          <p className="hint">
+            The text colour / outline / shadow controls could not be wired up (After Effects refused to add layer styles). Open <i>Layer ▸ Layer Styles</i> once in this AE session and build again; opacity, background and top fade work regardless.
           </p>
         )}
         {error && <p className="err">{error}</p>}
@@ -206,15 +211,15 @@ export function AEPanel({ cfg, set, patch, timeline, assets }: { cfg: Config; se
       <Collapsible title="What you get & how to tweak it">
         <ul className="help-list">
           <li>
-            <b>Main comp</b>: <i>TwitchSim Anchor</i> (null — move/scale the whole chat), <i>Background</i>, <i>Scroll</i> (null — the only animated thing; every push-up is a keyframe on its Y), and one layer per message named <code>msg 012 · username</code>.
+            <b>Main comp</b>: <i>TwitchSim Controls</i> (null, top layer — everything is parented to it: move / scale / rotate it to place the whole chat, and its <b>Effect Controls</b> hold the live tweaks: opacity, custom text & name colour, outline, shadow, background colour / opacity / corner radius, top fade — all wired with expressions, no rebuild), <i>Chat area</i> (matte), one layer per message named <code>msg 012 · username</code>, <i>Scroll</i> (null — the only animated thing; every push-up is a keyframe on its Y) and <i>Background</i>.
           </li>
           <li>
             <b>Parent to a message</b>: pick its <code>msg NNN</code> layer as parent — arrows, boxes, whatever you attach rides along as the chat scrolls. Each message layer is a precomp with its text, badges and emotes inside, so you can also open it and restyle a single message.
           </li>
           <li>
-            <b>Live in AE</b>: retime the scroll (drag its keyframes / time-remap the comp), colors, opacity, effects, motion blur, the anchor's position & scale, per-message tweaks. <b>Rebuild needed</b>: text changes, chat width, font size, new lines (the panel re-flows the layout).
+            <b>Live in AE</b>: everything on the Controls null, retiming the scroll (drag its keyframes / time-remap the comp), effects, motion blur, per-message tweaks. <b>Rebuild needed</b>: text changes, chat width, font size, new lines (the panel re-flows the layout).
           </li>
-          <li>Rebuilding with the same comp name updates the comp in place — where you already used it stays valid, and your own layers inside it are kept and re-parented to the message with the same name.</li>
+          <li>Rebuilding with the same comp name updates the comp in place — where you already used it stays valid, and your own layers inside it are kept and re-parented to the message with the same name. (The text-colour / outline / shadow expressions inside the message precomps find the Controls null through the comp's name, so if you rename the comp, build once more.)</li>
           <li>Text uses the Inter font (Twitch's font) — install it if AE shows a substitute. Alpha: the comp is transparent wherever the chat is; render ProRes 4444 or use it directly inside your edit.</li>
           <li>Heads-up: After Effects' text engine gets a little slower with every text layer a session creates (an AE quirk, not project size). If rebuilds start taking a minute, restarting AE resets it.</li>
         </ul>

@@ -93,12 +93,12 @@ export function usePlayer(durationMs: number) {
 
 export type Player = ReturnType<typeof usePlayer>
 
-export function Preview({ cfg, timeline, assets, player, zoom }: { cfg: Config; timeline: Timeline; assets: AssetCache; player: Player; zoom: number | 'fit' | 'auto' }) {
+export function Preview({ cfg, timeline, assets, player, zoom, fontsVersion = 0 }: { cfg: Config; timeline: Timeline; assets: AssetCache; player: Player; zoom: number | 'fit' | 'auto'; fontsVersion?: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const renderer = useMemo(() => new ChatRenderer(assets), [assets])
-  // a new timeline re-uses message ids from 1: drop cached layouts
-  useEffect(() => renderer.invalidate(), [renderer, timeline])
+  // a new timeline re-uses message ids from 1: drop cached layouts (also when a font arrived late)
+  useEffect(() => renderer.invalidate(), [renderer, timeline, fontsVersion])
   const style = useMemo(() => styleFromConfig(cfg), [cfg])
   const [fitScale, setFitScale] = useState(1)
   const dpr = Math.min(3, window.devicePixelRatio || 1)
@@ -145,7 +145,7 @@ export function Preview({ cfg, timeline, assets, player, zoom }: { cfg: Config; 
     const unsub = subscribe(draw)
     draw()
     return unsub
-  }, [cfg, timeline, style, renderer, tRef, subscribe, assets, dpr, zoomScale])
+  }, [cfg, timeline, style, renderer, tRef, subscribe, assets, dpr, zoomScale, fontsVersion])
 
   const geo = computeGeometry(cfg)
   return (

@@ -14,7 +14,7 @@ import { buildTimeline } from '../core/simulation'
 import { generateSubBadgeSet } from '../core/badges'
 import { Rng } from '../core/rng'
 import { loadChannel, type ChannelData } from '../core/channel'
-import { ensureFonts } from '../core/fonts'
+import { ensureFonts, onFontsChanged } from '../core/fonts'
 import type { Config } from '../core/types'
 import { DEFAULT_CONFIG } from '../core/defaults'
 import { makeFrameSource } from '../export/exporter'
@@ -39,6 +39,9 @@ export default function App() {
   }, [tab])
   const [channel, setChannel] = useState<ChannelData | null>(null)
   const [fontsReady, setFontsReady] = useState(false)
+  // bumps when a font finishes loading after start-up: cached text widths are stale, re-layout everything
+  const [fontsVersion, setFontsVersion] = useState(0)
+  useEffect(() => onFontsChanged(() => setFontsVersion((v) => v + 1)), [])
   const [zoom, setZoom] = useState<number | 'fit' | 'auto'>('auto')
 
   useEffect(() => {
@@ -110,7 +113,7 @@ export default function App() {
     const g = window as unknown as { __twitchsim?: Record<string, unknown> }
     // snapshot(tMs) renders one frame with the export pipeline (handy for debugging / tests)
     const snapshot = async (tMs: number) => {
-      const c = { ...cfg, exportFormat: 'png-seq' as const, exportTransparent: false }
+      const c = { ...cfg, exportFormat: 'png-seq' as const }
       await assets.loadAll(collectAssetUrls(timeline, c.exportScale > 1.25, styleFromConfig(c)))
       const src = makeFrameSource(c, timeline, assets)
       src.render(Math.round((tMs / 1000) * cfg.exportFps))
@@ -213,7 +216,7 @@ export default function App() {
       </header>
       <main className="main">
         <section className="stage">
-          {fontsReady ? <Preview cfg={cfg} timeline={timeline} assets={assets} player={player} zoom={zoom} /> : <div className="loading">Loading fonts…</div>}
+          {fontsReady ? <Preview cfg={cfg} timeline={timeline} assets={assets} player={player} zoom={zoom} fontsVersion={fontsVersion} /> : <div className="loading">Loading fonts…</div>}
           <Transport player={player} durationMs={timeline.durationMs} />
         </section>
         <aside className="panel">

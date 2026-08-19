@@ -110,12 +110,13 @@ What gets built:
 
 | Layer | What it is |
 |---|---|
-| `TwitchSim Anchor` (null) | move / scale the whole chat |
-| `Background` (shape) | the panel color, only when the style isn't transparent |
+| `TwitchSim Controls` (null, top layer) | everything is parented to it — move / scale / rotate it to place the whole chat. Its **Effect Controls** are the live tweaks, wired to the layers below with expressions (no rebuild): opacity, custom text colour, custom name colour, outline, shadow (+ softness / distance), background colour / opacity / corner radius, top fade |
+| `Background` (shape) | the panel behind the chat (opacity 0 for transparent looks — turn it up on the Controls null) |
 | `Scroll` (null) | **the only animated thing** — every push-up of the stack is a keyframe on its Y position (retime it, ease it, time-remap the comp…) |
 | `msg 012 · username` (precomp, one per message) | parent anything to it and it rides along; open it to restyle a single message: badges/emotes are footage layers, name & text are text layers (Inter), notice boxes / highlight pills are shape layers |
-| `Chat area (matte)` | luma matte that clips rows to the chat rectangle (and carries the optional "fade at the top edge") |
+| `Chat area (matte)` | luma matte that clips rows to the chat rectangle (and carries the top fade) |
 
+The text-colour / outline / shadow controls reach into the message precomps through the comp's name — if you rename the comp, build once more.
 Building again with the **same comp name updates the comp in place** (it stays valid wherever you already used it, and your own layers inside
 it are kept and re-parented to the message with the same name). Text edits, chat width, font size and new lines need a rebuild — the panel
 re-flows the layout, exactly like the preview. Badge & emote PNGs are written next to your project (`<project>/TwitchSim/<comp>/`), or in

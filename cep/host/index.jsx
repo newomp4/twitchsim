@@ -56,8 +56,16 @@ $.global.TWITCHSIM_JSON = (function () {
 })();
 
 $.global.TWITCHSIM = (function () {
-  var VERSION = '1.0.0';
+  var VERSION = '1.1.0';
   var TAG = 'twitchsim';
+  var CTL = 'TwitchSim Controls'; // the null everything hangs off; its Effect Controls drive the expressions below
+  var HOST_DIR = (function () {
+    try {
+      return new File($.fileName).parent.fsName;
+    } catch (e) {
+      return '';
+    }
+  })();
   var J = TWITCHSIM_JSON;
   var st = null; // current build state
   var fontCache = {};
@@ -87,6 +95,32 @@ $.global.TWITCHSIM = (function () {
   }
   function tf(layer) {
     return layer.property('ADBE Transform Group');
+  }
+  function q(sv) {
+    // string literal for an expression / ES3 source
+    return '"' + String(sv).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+  }
+  /** expression snippet that resolves the Controls null (from the main comp or from inside a message precomp) */
+  function ctlRef(inMain) {
+    return inMain ? 'thisComp.layer(' + q(CTL) + ')' : 'comp(' + q(st.data.compName) + ').layer(' + q(CTL) + ')';
+  }
+  function ctlProp(name, kind, inMain) {
+    return ctlRef(inMain) + '.effect(' + q(name) + ')(' + q(kind) + ')';
+  }
+  /** `value` unless the control resolves (a renamed comp / null must not break the layer) */
+  function safeExpr(body, fallback) {
+    return 'var v = ' + (fallback || 'value') + ';\ntry {\n  v = ' + body + ';\n} catch (e) {}\nv';
+  }
+  function setExpr(prop, expr) {
+    try {
+      prop.expression = expr;
+    } catch (e) {}
+  }
+  function addControl(fx, match, name, valueMatch, v) {
+    var c = fx.addProperty(match);
+    c.name = name;
+    c.property(valueMatch).setValue(v);
+    return c;
   }
   function num(v, d) {
     return typeof v === 'number' && isFinite(v) ? v : d;
@@ -305,23 +339,73 @@ $.global.TWITCHSIM = (function () {
   }
 
   /**
-   * Text layers are expensive to style through scripting (every attribute is an undo transaction
-   * in AE's text engine, and that engine slows down with every transaction of the session), so we
-   * style ONE template layer per distinct look and copy it; per layer only the string changes.
+   * One text layer per build that carries the three layer styles the live controls drive (Drop Shadow,
+   * Stroke, Color Overlay). Layer styles can only be added through menu commands (slow, ~1 s each and
+   * they need the comp in the viewer), so it is done once and every style template is a duplicate.
    */
-  function styleTemplate(spec, textOpts) {
-    var font = resolveFont(spec.family, spec.weight, spec.italic);
-    if (spec.noFx) textOpts = { shadow: false, strokeWidth: 0, shadowDist: textOpts.shadowDist, shadowSoft: textOpts.shadowSoft };
-    var key = font.ps + '|' + (font.faux ? 1 : 0) + '|' + spec.size + '|' + spec.color.join(',') + '|' + textOpts.strokeWidth + '|' + (textOpts.shadow ? 1 : 0);
-    var tl = st.templates[key];
-    if (tl) return tl;
+  function masterTemplate() {
+    if (st.master) return st.master;
     if (!st.styleComp) {
       // as long as the build so copied layers span the whole precomp
       st.styleComp = app.project.items.addComp('text styles (used by the builder)', 100, 100, 1, Math.max(1, st.data.durationSec), st.data.fps);
       st.styleComp.parentFolder = st.root;
       st.styleComp.comment = TAG + '-styles';
     }
-    tl = st.styleComp.layers.addText('Ag');
+    var m = st.styleComp.layers.addText('Ag');
+    m.name = '\u00b7master';
+    var hasStyles = function () {
+      try {
+        var ls = m.property('ADBE Layer Styles');
+        return ls.numProperties > 0 && ls.property('dropShadow/enabled').enabled && ls.property('frameFX/enabled').enabled && ls.property('solidFill/enabled').enabled;
+      } catch (e) {
+        return false;
+      }
+    };
+    // 1) the shipped animation preset (Drop Shadow + Stroke + Color Overlay, all switched off): applyPreset
+    //    targets the *selected* layers, so select exactly this one
+    try {
+      for (var li = 1; li <= st.styleComp.numLayers; li++) st.styleComp.layer(li).selected = false;
+      m.selected = true;
+      var f = st.presetPath ? new File(st.presetPath) : null;
+      if (!(f && f.exists) && HOST_DIR) f = new File(HOST_DIR + '/twitchsim-styles.ffx');
+      if (f && f.exists) m.applyPreset(f);
+    } catch (e) {}
+    // 2) fallback: the Layer > Layer Styles menu commands. AE registers them lazily (only once that submenu
+    //    was opened in the session), so this may silently do nothing — hence the preset first.
+    if (!hasStyles()) {
+      try {
+        st.styleComp.openInViewer();
+        for (var lj = 1; lj <= st.styleComp.numLayers; lj++) st.styleComp.layer(lj).selected = false;
+        m.selected = true;
+        app.executeCommand(9000); // Drop Shadow
+        app.executeCommand(9008); // Stroke
+        app.executeCommand(9006); // Color Overlay
+      } catch (e) {}
+      try {
+        st.main.openInViewer();
+      } catch (e) {}
+    }
+    try {
+      m.selected = false;
+    } catch (e) {}
+    st.textControls = hasStyles();
+    st.master = m;
+    return m;
+  }
+
+  /**
+   * Text layers are expensive to style through scripting (every attribute is an undo transaction
+   * in AE's text engine, and that engine slows down with every transaction of the session), so we
+   * style ONE template layer per distinct look and copy it; per layer only the string changes.
+   */
+  function styleTemplate(spec, textOpts) {
+    var font = resolveFont(spec.family, spec.weight, spec.italic);
+    var noFx = !!spec.noFx;
+    var role = spec.role || '';
+    var key = font.ps + '|' + (font.faux ? 1 : 0) + '|' + spec.size + '|' + spec.color.join(',') + '|' + (noFx ? 'nofx' : 'fx') + '|' + role;
+    var tl = st.templates[key];
+    if (tl) return tl;
+    tl = masterTemplate().duplicate();
     tl.name = '\u00b7tmpl ' + key; // unique, never used as a real layer name
     var tp = tl.property('ADBE Text Properties').property('ADBE Text Document');
     var td = tp.value;
@@ -334,14 +418,7 @@ $.global.TWITCHSIM = (function () {
     td.fontSize = spec.size;
     td.applyFill = true;
     td.fillColor = [spec.color[0], spec.color[1], spec.color[2]];
-    if (textOpts.strokeWidth > 0) {
-      td.applyStroke = true;
-      td.strokeColor = [0, 0, 0];
-      td.strokeWidth = textOpts.strokeWidth;
-      try {
-        td.strokeOverFill = false;
-      } catch (e) {}
-    } else td.applyStroke = false;
+    td.applyStroke = false; // the outline is a Stroke layer style (live-adjustable), see below
     td.tracking = 0;
     try {
       td.fauxBold = false;
@@ -349,16 +426,46 @@ $.global.TWITCHSIM = (function () {
     } catch (e) {}
     td.justification = ParagraphJustification.LEFT_JUSTIFY;
     tp.setValue(td);
-    if (textOpts.shadow) {
-      try {
-        var fx = tl.property('ADBE Effect Parade').addProperty('ADBE Drop Shadow');
-        fx.property('ADBE Drop Shadow-0001').setValue([0, 0, 0, 1]);
-        fx.property('ADBE Drop Shadow-0002').setValue(217); // 85%
-        fx.property('ADBE Drop Shadow-0003').setValue(180);
-        fx.property('ADBE Drop Shadow-0004').setValue(textOpts.shadowDist);
-        fx.property('ADBE Drop Shadow-0005').setValue(textOpts.shadowSoft);
-      } catch (e) {}
-    }
+    // Live tweaks come from the Controls null through the LAYER STYLES the master carries (drop shadow /
+    // stroke / colour overlay), not text-style expressions: a sourceText expression costs ~100 ms per
+    // layer in AE's text engine, layer styles copy for free with the layer.
+    try {
+      var ls = tl.property('ADBE Layer Styles');
+      var ds = ls.property('dropShadow/enabled');
+      var sk = ls.property('frameFX/enabled');
+      var so = ls.property('solidFill/enabled');
+      if (noFx) {
+        ds.enabled = false;
+        sk.enabled = false;
+      } else {
+        ds.property('dropShadow/color').setValue([0, 0, 0, 1]);
+        ds.property('dropShadow/opacity').setValue(textOpts.shadow ? 85 : 0);
+        ds.property('dropShadow/useGlobalAngle').setValue(0);
+        ds.property('dropShadow/localLightingAngle').setValue(90); // light from above: the shadow falls down, like the canvas
+        ds.property('dropShadow/distance').setValue(textOpts.shadowDist);
+        ds.property('dropShadow/blur').setValue(textOpts.shadowSoft);
+        ds.property('dropShadow/chokeMatte').setValue(0);
+        setExpr(ds.property('dropShadow/opacity'), safeExpr(ctlProp('Shadow', 'Slider', false)));
+        setExpr(ds.property('dropShadow/distance'), safeExpr(ctlProp('Shadow distance', 'Slider', false)));
+        setExpr(ds.property('dropShadow/blur'), safeExpr(ctlProp('Shadow softness', 'Slider', false)));
+        sk.property('frameFX/color').setValue([0, 0, 0, 1]);
+        // size cannot go below 1: "no outline" = opacity 0. Canvas strokes are centred under the fill, so half shows.
+        sk.property('frameFX/size').setValue(Math.max(1, textOpts.strokeWidth / 2));
+        sk.property('frameFX/opacity').setValue(textOpts.strokeWidth > 0 ? 100 : 0);
+        try {
+          sk.property('frameFX/style').setValue(1); // outside
+        } catch (e) {}
+        setExpr(sk.property('frameFX/size'), safeExpr('Math.max(1, ' + ctlProp('Outline', 'Slider', false) + ')'));
+        setExpr(sk.property('frameFX/opacity'), safeExpr(ctlProp('Outline', 'Slider', false) + ' > 0 ? 100 : 0'));
+      }
+      if (!role) so.enabled = false;
+      else {
+        so.property('solidFill/color').setValue([1, 1, 1, 1]);
+        so.property('solidFill/opacity').setValue(0);
+        setExpr(so.property('solidFill/color'), safeExpr(ctlProp(role === 'name' ? 'Name color' : 'Text color', 'Color', false)));
+        setExpr(so.property('solidFill/opacity'), safeExpr(ctlProp(role === 'name' ? 'Custom name color' : 'Custom text color', 'Checkbox', false) + ' > 0 ? 100 : 0', '0'));
+      }
+    } catch (e) {}
     st.templates[key] = tl;
     return tl;
   }
@@ -414,6 +521,26 @@ $.global.TWITCHSIM = (function () {
     return l;
   }
 
+  /** Effect Controls on the Controls null: the live, expression-driven tweaks (defaults = the built look) */
+  function addControls(layer, data) {
+    var fx = layer.property('ADBE Effect Parade');
+    var bgd = data.background || { color: [0.09, 0.09, 0.1], opacity: 0, radius: 0 };
+    var stroke = num(data.text.strokeWidth, 0);
+    addControl(fx, 'ADBE Slider Control', 'Opacity', 'ADBE Slider Control-0001', 100);
+    addControl(fx, 'ADBE Checkbox Control', 'Custom text color', 'ADBE Checkbox Control-0001', 0);
+    addControl(fx, 'ADBE Color Control', 'Text color', 'ADBE Color Control-0001', [1, 1, 1, 1]);
+    addControl(fx, 'ADBE Checkbox Control', 'Custom name color', 'ADBE Checkbox Control-0001', 0);
+    addControl(fx, 'ADBE Color Control', 'Name color', 'ADBE Color Control-0001', [1, 1, 1, 1]);
+    addControl(fx, 'ADBE Slider Control', 'Outline', 'ADBE Slider Control-0001', stroke / 2);
+    addControl(fx, 'ADBE Slider Control', 'Shadow', 'ADBE Slider Control-0001', data.text.shadow ? 85 : 0);
+    addControl(fx, 'ADBE Slider Control', 'Shadow softness', 'ADBE Slider Control-0001', 3 * data.scale);
+    addControl(fx, 'ADBE Slider Control', 'Shadow distance', 'ADBE Slider Control-0001', 1 * data.scale);
+    addControl(fx, 'ADBE Slider Control', 'Background opacity', 'ADBE Slider Control-0001', num(bgd.opacity, 0));
+    addControl(fx, 'ADBE Color Control', 'Background color', 'ADBE Color Control-0001', [bgd.color[0], bgd.color[1], bgd.color[2], 1]);
+    addControl(fx, 'ADBE Slider Control', 'Corner radius', 'ADBE Slider Control-0001', num(bgd.radius, 0));
+    addControl(fx, 'ADBE Slider Control', 'Top fade', 'ADBE Slider Control-0001', Math.max(0, num(data.fadeTop, 0)));
+  }
+
   function buildMessage(msg) {
     var d = st.data;
     var pc = app.project.items.addComp(msg.name, msg.compW, msg.compH, 1, d.durationSec, d.fps);
@@ -452,6 +579,7 @@ $.global.TWITCHSIM = (function () {
       .setValue([0, msg.h / 2]);
     var pos = tf(ml).property('ADBE Position');
     pos.setValue([0, msg.localY + msg.h / 2]);
+    setExpr(tf(ml).property('ADBE Opacity'), safeExpr('value * ' + ctlProp('Opacity', 'Slider', true) + ' / 100'));
     if (msg.anim) {
       if (msg.anim.opacity) applyKeys(tf(ml).property('ADBE Opacity'), msg.anim.opacity, 1);
       if (msg.anim.x || msg.anim.y) pos.dimensionsSeparated = true;
@@ -499,6 +627,7 @@ $.global.TWITCHSIM = (function () {
       var rec = recs[i];
       if (!rec.parentName) continue;
       var np = findLayerByName(main, rec.parentName);
+      if (!np && rec.parentName === 'TwitchSim Anchor') np = findLayerByName(main, CTL); // builds before 1.1
       if (!np) continue;
       try {
         if (rec.local) {
@@ -552,6 +681,9 @@ $.global.TWITCHSIM = (function () {
       footage: {},
       assetMeta: {},
       templates: {},
+      master: null,
+      textControls: null,
+      presetPath: a.presetPath ? String(a.presetPath) : '',
       styleComp: null,
       foreign: [],
       main: null,
@@ -622,20 +754,32 @@ $.global.TWITCHSIM = (function () {
       }
 
       // structure layers (created bottom -> top)
+      // The Controls null is the parent of everything. Its layer-space origin stays at the chat's top-left
+      // (children sit at [0,0]) while its anchor point is the chat's pin point, so scaling / rotating it
+      // works about the same corner or centre the chat is aligned to.
       var anchor = main.layers.addNull(dur);
-      anchor.name = 'TwitchSim Anchor';
+      anchor.name = CTL;
       anchor.comment = TAG + '-anchor';
       anchor.label = 10;
-      tf(anchor).property('ADBE Position').setValue([data.chat.x, data.chat.y]);
+      var ax = num(data.chat.ax, 0.5) * data.chat.w;
+      var ay = num(data.chat.ay, 0.5) * data.chat.h;
+      tf(anchor).property('ADBE Anchor Point').setValue([ax, ay]);
+      tf(anchor).property('ADBE Position').setValue([data.chat.x + ax, data.chat.y + ay]);
+      addControls(anchor, data);
       st.anchor = anchor;
 
-      if (data.background) {
-        var bg = makeRect(main, { name: 'Background', x: 0, y: 0, w: data.chat.w, h: data.chat.h, radius: data.background.radius, color: data.background.color, opacity: data.background.opacity });
-        bg.comment = TAG + '-bg';
-        bg.parent = anchor;
-        tf(bg).property('ADBE Position').setValue([0, 0]);
-        tf(bg).property('ADBE Anchor Point').setValue([0, 0]);
-      }
+      var bgd = data.background || { color: [0.09, 0.09, 0.1], opacity: 0, radius: 0 };
+      var bg = makeRect(main, { name: 'Background', x: 0, y: 0, w: data.chat.w, h: data.chat.h, radius: bgd.radius, color: bgd.color, opacity: bgd.opacity });
+      bg.comment = TAG + '-bg';
+      bg.parent = anchor;
+      tf(bg).property('ADBE Position').setValue([0, 0]);
+      tf(bg).property('ADBE Anchor Point').setValue([0, 0]);
+      try {
+        var bgg = bg.property('ADBE Root Vectors Group').property(1).property('ADBE Vectors Group');
+        setExpr(bgg.property('ADBE Vector Graphic - Fill').property('ADBE Vector Fill Color'), safeExpr(ctlProp('Background color', 'Color', true)));
+        setExpr(bgg.property('ADBE Vector Graphic - Fill').property('ADBE Vector Fill Opacity'), safeExpr(ctlProp('Background opacity', 'Slider', true)));
+        setExpr(bgg.property('ADBE Vector Shape - Rect').property('ADBE Vector Rect Roundness'), safeExpr(ctlProp('Corner radius', 'Slider', true)));
+      } catch (e) {}
 
       var scroll = main.layers.addNull(dur);
       scroll.name = 'Scroll';
@@ -648,7 +792,7 @@ $.global.TWITCHSIM = (function () {
       // The canvas clips everything to the chat rectangle; in AE a shared luma matte does the same
       // (rows sliding out at the top / in at the bottom stay inside), plus the optional top fade.
       if (aeVersion() >= 23) {
-        var matte = main.layers.addSolid([1, 1, 1], data.fadeTop > 0 ? 'Chat area + top fade (matte)' : 'Chat area (matte)', data.chat.w, data.chat.h, 1, dur);
+        var matte = main.layers.addSolid([1, 1, 1], 'Chat area (matte)', data.chat.w, data.chat.h, 1, dur);
         matte.comment = TAG + '-matte';
         try {
           matte.source.comment = TAG + '-solid:' + data.buildKey;
@@ -656,15 +800,16 @@ $.global.TWITCHSIM = (function () {
         matte.parent = anchor;
         tf(matte).property('ADBE Anchor Point').setValue([0, 0]);
         tf(matte).property('ADBE Position').setValue([0, 0]);
-        if (data.fadeTop > 0) {
-          try {
-            var ramp = matte.property('ADBE Effect Parade').addProperty('ADBE Ramp');
-            ramp.property('ADBE Ramp-0001').setValue([data.chat.w / 2, 0]);
-            ramp.property('ADBE Ramp-0002').setValue([0, 0, 0, 1]);
-            ramp.property('ADBE Ramp-0003').setValue([data.chat.w / 2, data.fadeTop]);
-            ramp.property('ADBE Ramp-0004').setValue([1, 1, 1, 1]);
-          } catch (e) {}
-        }
+        // top fade: black->white ramp over the first N px (N = "Top fade" on the Controls null; 0 = none)
+        try {
+          var ramp = matte.property('ADBE Effect Parade').addProperty('ADBE Ramp');
+          ramp.name = 'Top fade';
+          ramp.property('ADBE Ramp-0001').setValue([data.chat.w / 2, -1]);
+          ramp.property('ADBE Ramp-0002').setValue([0, 0, 0, 1]);
+          ramp.property('ADBE Ramp-0003').setValue([data.chat.w / 2, Math.max(0, num(data.fadeTop, 0))]);
+          ramp.property('ADBE Ramp-0004').setValue([1, 1, 1, 1]);
+          setExpr(ramp.property('ADBE Ramp-0003'), safeExpr('[value[0], Math.max(0, ' + ctlProp('Top fade', 'Slider', true) + ')]'));
+        } catch (e) {}
         st.matte = matte;
       }
     } finally {
@@ -703,8 +848,11 @@ $.global.TWITCHSIM = (function () {
         st.matte.moveToBeginning();
         st.matte.enabled = false;
       }
-      // keep the anchor at the very bottom
-      st.anchor.moveToEnd();
+      // the Controls null on top, where you look first
+      st.anchor.moveToBeginning();
+      try {
+        st.anchor.selected = true;
+      } catch (e) {}
       var re = reattachForeign(st.main, st.foreign);
       try {
         st.main.openInViewer();
@@ -712,7 +860,7 @@ $.global.TWITCHSIM = (function () {
     } finally {
       app.endUndoGroup();
     }
-    var out = { compName: st.main.name, layers: st.main.numLayers, messages: st.msgLayers.length, reattached: re, folder: st.folder };
+    var out = { compName: st.main.name, layers: st.main.numLayers, messages: st.msgLayers.length, reattached: re, folder: st.folder, textControls: st.textControls };
     st = null;
     return reply(out);
   }

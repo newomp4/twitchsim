@@ -6,7 +6,7 @@ import { collectAssetUrls } from '../core/renderer'
 import { styleFromConfig } from '../core/layout'
 import { ensureFonts } from '../core/fonts'
 import { compileScene, type SceneData } from './scene'
-import { callHost, mkdirp, writeBase64, writeText, posixPath, jsonForES3 } from './cep'
+import { callHost, mkdirp, writeBase64, writeText, posixPath, jsonForES3, systemPath } from './cep'
 
 export type AEPhase = 'assets' | 'compile' | 'write' | 'prepare' | 'build' | 'finish' | 'done' | 'error'
 
@@ -35,6 +35,8 @@ export interface AEBuildResult {
   messages: number
   reattached: number
   folder: string
+  /** false when the layer styles behind the text controls (colour / outline / shadow) could not be added */
+  textControls: boolean | null
   stats: SceneData['stats']
   files: number
   seconds: number
@@ -113,9 +115,11 @@ export async function buildInAE(cfg: Config, timeline: Timeline, assets: AssetCa
   // host
   onProgress({ phase: 'prepare', done: 0, total: 1, message: 'Importing footage into After Effects…' })
   await yieldUI()
-  const begun = await callHost<{ total: number; assets: number }>('begin', { jsonPath, folder })
+  // the animation preset that carries the text layer styles the Controls null drives
+  const presetPath = posixPath(systemPath('extension')) + '/host/twitchsim-styles.ffx'
+  const begun = await callHost<{ total: number; assets: number }>('begin', { jsonPath, folder, presetPath })
   // from here on the project is being modified: whatever happens, run finish() so it is left consistent
-  let fin: { compName: string; layers: number; messages: number; reattached: number; folder: string }
+  let fin: { compName: string; layers: number; messages: number; reattached: number; folder: string; textControls: boolean | null }
   try {
     check()
     const batch = Math.max(1, opts.batch ?? 8)

@@ -39,11 +39,15 @@ function cepHtmlPlugin(): Plugin {
     transformIndexHtml: {
       order: 'post',
       handler(html) {
-        return html
+        html = html
           .replace(/<link rel="modulepreload"[^>]*>\s*/g, '')
           .replace(/<script type="module" crossorigin src="/g, '<script defer src="')
           .replace(/<script type="module" src="/g, '<script defer src="')
           .replace(/ crossorigin(="[^"]*")?/g, '')
+        // the stylesheet (it carries the bundled Inter faces) must be applied before the script measures text
+        const script = html.match(/<script defer src="[^"]*"><\/script>\s*/)?.[0]
+        if (script) html = html.replace(script, '').replace('</head>', `  ${script.trim()}\n  </head>`)
+        return html
       },
     },
   }

@@ -5,11 +5,13 @@
  *
  * Structure produced (see cep/host/index.jsx for the AE side):
  *   Main comp
- *     ├ Chat area (matte) — clips rows to the chat rect, carries the optional top fade
+ *     ├ TwitchSim Controls (null) ← parent of everything: move / scale / rotate the whole chat; its
+ *     │                             Effect Controls (opacity, colours, outline, shadow, background, top
+ *     │                             fade) drive the layers below through expressions
+ *     ├ Chat area (matte) — clips rows to the chat rect, carries the top fade (Ramp)
  *     ├ msg NNN · user   ← one precomp per message, static position, parented to "Scroll"
  *     ├ Scroll (null)    ← the ONE animated property: every push-up of the stack lives here
- *     ├ Background (shape, optional)
- *     └ TwitchSim Anchor (null) ← move / scale the whole chat
+ *     └ Background (shape; opacity 0 when the look is transparent)
  */
 import type { Config } from '../core/types'
 import type { Timeline } from '../core/simulation'
@@ -40,7 +42,7 @@ export type RGB = [number, number, number]
 
 export type MsgLayer =
   | { type: 'rect'; name: string; x: number; y: number; w: number; h: number; radius: number; color: RGB; opacity: number; state?: 'normal' | 'deleted' }
-  | { type: 'text'; name: string; text: string; x: number; y: number; family: string; weight: number; italic: boolean; size: number; color: RGB; opacity: number; underline?: number; /** skip stroke/shadow (pill text) */ noFx?: boolean; state?: 'normal' | 'deleted' }
+  | { type: 'text'; name: string; text: string; x: number; y: number; family: string; weight: number; italic: boolean; size: number; color: RGB; opacity: number; underline?: number; /** skip stroke/shadow (pill text) */ noFx?: boolean; /** name / body runs follow the Controls null's colour overrides */ role?: 'name' | 'body'; state?: 'normal' | 'deleted' }
   | { type: 'image'; name: string; asset: string; cx: number; cy: number; w: number; h: number; opacity: number; state?: 'normal' | 'deleted' }
 
 export interface SceneMessage {
@@ -82,8 +84,10 @@ export interface SceneData {
   durationSec: number
   scale: number
   frame: { w: number; h: number }
-  chat: { x: number; y: number; w: number; h: number }
-  background: { color: RGB; opacity: number; radius: number } | null
+  /** ax/ay: where the chat is pinned in the frame (0..1) — the Controls null scales/rotates about it */
+  chat: { x: number; y: number; w: number; h: number; ax: number; ay: number }
+  /** always present (opacity 0 for transparent looks) so the Controls null can switch a panel on later */
+  background: { color: RGB; opacity: number; radius: number }
   /** px at scale; 0 = off */
   fadeTop: number
   text: { shadow: boolean; strokeWidth: number }
@@ -290,7 +294,7 @@ interface Run {
 }
 
 function styleKey(st: TextStyle): string {
-  return `${st.font}|${st.color}|${st.italic ? 1 : 0}|${st.underline ? 1 : 0}|${st.alpha ?? 1}|${st.bg ? 'bg' : ''}`
+  return `${st.font}|${st.color}|${st.italic ? 1 : 0}|${st.underline ? 1 : 0}|${st.alpha ?? 1}|${st.bg ? 'bg' : ''}|${st.role ?? ''}`
 }
 
 /** Flattens a line into positioned atoms (groups expanded). */
@@ -379,6 +383,7 @@ function emitRow(L: RowLayout, ctx: RowCtx, state?: 'normal' | 'deleted', effect
         }
         const layer: MsgLayer = { type: 'text', name: r.text.length > 28 ? r.text.slice(0, 27) + '…' : r.text, text: r.text, x: r3((x0 + tx) * s), y: r3(baseline * s), family: f.family, weight: f.weight, italic: !!f.italic || !!r.style.italic, size: r3(f.size * s), color: c.rgb, opacity: r3(c.a * 100 * (r.style.alpha ?? 1)) }
         if (r.style.bg) layer.noFx = true // the canvas draws no outline/shadow on pill text
+        if (r.style.role) layer.role = r.style.role
         if (r.style.underline) layer.underline = r3((r.w - (r.style.bg ? r.style.bg.padX * 2 : 0)) * s)
         push(layer)
       }
@@ -721,11 +726,13 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
   }
 
   // ---- background ----
-  let background: SceneData['background'] = null
+  let background: SceneData['background'] = { color: [0.09, 0.09, 0.1], opacity: 0, radius: r3(style.cornerRadius * s) }
   if (style.bgColor) {
     const c = parseColor(style.bgColor)
     if (c.a > 0) background = { color: c.rgb, opacity: r3(c.a * 100), radius: r3(style.cornerRadius * s) }
   }
+  const ax = cfg.anchor.includes('l') ? 0 : cfg.anchor.includes('r') ? 1 : 0.5
+  const ay = cfg.anchor.startsWith('t') ? 0 : cfg.anchor.startsWith('b') ? 1 : 0.5
 
   const data: SceneData = {
     version: 1,
@@ -735,7 +742,7 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
     durationSec: r3(durationSec),
     scale: s,
     frame: { w: geo.outW, h: geo.outH },
-    chat: { x: geo.chatX, y: geo.chatY, w: geo.chatW, h: geo.chatH },
+    chat: { x: geo.chatX, y: geo.chatY, w: geo.chatW, h: geo.chatH, ax, ay },
     background,
     fadeTop: r3(cfg.fadeTopEdge * s),
     text: { shadow: style.textShadow, strokeWidth: r3(style.textOutline * 2 * s) },
