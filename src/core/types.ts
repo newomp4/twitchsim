@@ -156,8 +156,12 @@ export interface Config {
   streamerColor: string
   // pacing
   messagesPerMinute: number
-  /** natural = human-like random gaps & bursts; even = metronomic, exactly one interval apart */
-  pacing: 'natural' | 'even'
+  /** natural = human-like random gaps & bursts; even = metronomic; accelerate = gaps shrink each message (speed ramp) */
+  pacing: 'natural' | 'even' | 'accelerate'
+  /** speed-ramp (pacing='accelerate'): first gap in ms, per-message multiplier, and the floor gap in ms */
+  rampStartGap: number
+  rampRatio: number
+  rampMinGap: number
   burstiness: number // 0..1
   reactionMoments: number // 0..1 how often the crowd reacts together
   startDelayMs: number
@@ -249,6 +253,12 @@ export interface Config {
   easePreset: EasePreset
   easeCurve: [number, number, number, number]
   easeKeyframes: string
+  /** slide entrance travel as a fraction of the chat width (0..1) */
+  slideDistance: number
+  /** cinematic: newest message starts on the vertical centre line, then the column drifts down to fill the frame */
+  fillDown: boolean
+  fillHold: number
+  fillDrift: number
   fadeTopEdge: number
   modView: boolean
   hypeTrain: boolean

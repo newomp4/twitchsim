@@ -106,7 +106,9 @@ export interface SceneData {
   fadeTop: number
   text: { shadow: boolean; strokeWidth: number; tracking: number }
   /** entrance animation defaults for the Controls null (style index = the dropdown order in the host) */
-  anim: { style: number; ms: number; slidePx: number }
+  anim: { style: number; ms: number; slidePx: number; slidePct: number }
+  /** cinematic 'start centred, drift down' — null = off */
+  fill: { liftPx: number; hold: number; drift: number } | null
   /** entrance easing sampled 0..1 (65 points), or null = the host's built-in easeOutCubic */
   ease: number[] | null
   /** /clear times (comp seconds) — the Scroll expression counts rows per epoch */
@@ -659,7 +661,8 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
     background,
     fadeTop: r3(cfg.fadeTopEdge * s),
     text: { shadow: style.textShadow, strokeWidth: r3(style.textOutline * 2 * s), tracking: r3((style.letterSpacing / Math.max(1, style.fontSize)) * 1000) },
-    anim: { style: ANIM_STYLE_INDEX[cfg.animation] ?? 2, ms: Math.max(1, cfg.animationMs), slidePx: r3(W * s) },
+    anim: { style: ANIM_STYLE_INDEX[cfg.animation] ?? 2, ms: Math.max(1, cfg.animationMs), slidePx: r3(W * s), slidePct: r3((cfg.slideDistance ?? 1) * 100) },
+    fill: cfg.fillDown ? { liftPx: r3(Math.max(0, H / 2 - pb - style.lineHeight / 2) * s), hold: r3(cfg.fillHold ?? 1), drift: r3(cfg.fillDrift ?? 1.5) } : null,
     ease: easeSamples(cfg)?.map((v) => r3(v)) ?? null,
     clears: clears.filter((c) => c > 0 && c <= durationSec),
     scroll,

@@ -266,12 +266,14 @@ export function buildTimeline(inputs: SimInputs): Timeline {
   messages.sort((a, b) => a.t - b.t || a.id - b.id)
   if (cfg.pacing === 'even') {
     evenOut(messages, baseGapMs, speedChanges)
+  } else if (cfg.pacing === 'accelerate') {
+    accelerateOut(messages, Math.max(1, cfg.rampStartGap), Math.max(0.05, Math.min(0.999, cfg.rampRatio)), Math.max(1, Math.min(cfg.rampMinGap, cfg.rampStartGap)))
+  }
+  if (cfg.pacing === 'even' || cfg.pacing === 'accelerate') {
     // the clear notices moved with the messages: re-derive the clear times from them
     clears.length = 0
     for (const m of messages) if (m.notice?.kind === 'clear') clears.push(m.t)
-  }
-  if (cfg.pacing === 'even' && cfg.durationAuto && useScript && messages.length) {
-    durationMs = Math.max(3000, messages[messages.length - 1].t + cfg.tailSec * 1000)
+    if (cfg.durationAuto && messages.length) durationMs = Math.max(3000, messages[messages.length - 1].t + cfg.tailSec * 1000)
   }
   return { messages, durationMs, chatters: ctx.chatters, clears: clears.sort((a, b) => a - b) }
 }
@@ -1263,6 +1265,51 @@ function evenOut(messages: ChatMessage[], gap: number, speedChanges: { t: number
     }
     if (k < 0) return T
     return rows[k].t + (T - origT.get(rows[k])!)
+  }
+  for (const m of messages) if (m.deletedAt !== undefined) m.deletedAt = Math.max(m.t, q(mapTime(m.deletedAt)))
+  messages.sort((a, b) => a.t - b.t || a.id - b.id)
+}
+
+/**
+ * Speed-ramp pacing: re-times messages so the gap between consecutive ones shrinks geometrically —
+ * gap(i) = max(minGap, startGap * ratio^i) — turning any set of lines into an accelerating chat.
+ * Transit/entrance durations are unchanged; only the spacing speeds up. Pinned rows (@N, +N, !wait) hold.
+ */
+function accelerateOut(messages: ChatMessage[], startGap: number, ratio: number, minGap: number): void {
+  if (!messages.length) return
+  const origT = new Map<ChatMessage, number>(messages.map((m) => [m, m.t]))
+  const q = (v: number) => Math.round(v * 1000) / 1000
+  const before = messages.filter((m) => m.t < 0)
+  const after = messages.filter((m) => m.t >= 0)
+  // pre-fill uses the (slow) starting gap
+  for (let i = before.length - 1, k = 1; i >= 0; i--, k++) before[i].t = q(-k * startGap)
+  if (after.length) {
+    // the ramp is deterministic: the first message starts at t=0 (or its pinned time) so the chat begins right away
+    if (!after[0].pinned) after[0].t = 0
+    let prevNew = after[0].t
+    let gap = startGap // the first gap is the full startGap; each later gap shrinks by ratio
+    for (let i = 1; i < after.length; i++) {
+      let newT = prevNew + Math.max(gap, after[i].minGapBefore ?? 0)
+      if (after[i].pinned && origT.get(after[i])! >= prevNew + 1) newT = origT.get(after[i])!
+      after[i].t = q(newT)
+      prevNew = after[i].t
+      gap = Math.max(minGap, gap * ratio)
+    }
+  }
+  // deletions ride with the row before them (same as evenOut)
+  const rows = [...messages].sort((a, b) => origT.get(a)! - origT.get(b)!)
+  const mapTime = (T: number) => {
+    let lo = 0
+    let hi = rows.length - 1
+    let k = -1
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1
+      if (origT.get(rows[mid])! <= T) {
+        k = mid
+        lo = mid + 1
+      } else hi = mid - 1
+    }
+    return k < 0 ? T : rows[k].t + (T - origT.get(rows[k])!)
   }
   for (const m of messages) if (m.deletedAt !== undefined) m.deletedAt = Math.max(m.t, q(mapTime(m.deletedAt)))
   messages.sort((a, b) => a.t - b.t || a.id - b.id)

@@ -143,7 +143,7 @@ export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Con
       )}
 
       <Section title="Timing">
-        <Slider
+        {cfg.pacing !== 'accelerate' && <Slider
           label={cfg.pacing === 'even' ? 'Interval' : 'Chat speed'}
           value={cfg.messagesPerMinute}
           min={1}
@@ -153,11 +153,20 @@ export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Con
           onChange={(v) => set('messagesPerMinute', v)}
           format={(v) => (cfg.pacing === 'even' ? `every ${(60 / v).toFixed(2)} s (${v}/min)` : `${v} msg/min`)}
           hint={cfg.pacing === 'even' ? 'Perfectly regular; !wait pauses in your lines are kept.' : '10–30 = small stream · 100–300 = mid-size · 500+ = huge'}
-        />
-        <Row>
-          <Toggle label="Regular intervals (metronomic)" value={cfg.pacing === 'even'} onChange={(v) => set('pacing', v ? 'even' : 'natural')} />
-          <Toggle label="Start with the chat already full" value={cfg.prefillSec > 0} onChange={(v) => set('prefillSec', v ? 20 : 0)} />
-        </Row>
+        />}
+        <Field label="Pacing" hint="Natural = human gaps & bursts. Regular = metronomic. Speed ramp = gaps shrink each message so the chat accelerates (great after a hand-animated intro).">
+          <Segmented value={cfg.pacing} onChange={(v) => set('pacing', v)} options={[{ value: 'natural', label: 'Natural' }, { value: 'even', label: 'Regular' }, { value: 'accelerate', label: 'Speed ramp' }]} />
+        </Field>
+        {cfg.pacing === 'accelerate' && (
+          <>
+            <Row>
+              <Slider label="First gap" value={cfg.rampStartGap} min={120} max={2000} step={10} onChange={(v) => set('rampStartGap', v)} format={(v) => `${(v / 1000).toFixed(2)}s`} hint="how far apart the first messages are" />
+              <Slider label="Fastest gap" value={cfg.rampMinGap} min={40} max={600} step={5} onChange={(v) => set('rampMinGap', v)} format={(v) => `${(v / 1000).toFixed(2)}s`} hint="the floor it speeds up to" />
+            </Row>
+            <Slider label="Speed-up per message" value={cfg.rampRatio} min={0.7} max={0.98} step={0.005} onChange={(v) => set('rampRatio', v)} format={(v) => `${Math.round(v * 100)}% of the last gap`} hint="lower = ramps up faster" />
+          </>
+        )}
+        <Toggle label="Start with the chat already full" value={cfg.prefillSec > 0} onChange={(v) => set('prefillSec', v ? 20 : 0)} />
         {orderedLines && hasLines && <Toggle label="End right after my last line (loop-friendly)" value={cfg.durationAuto} onChange={(v) => set('durationAuto', v)} />}
         {!(cfg.durationAuto && orderedLines && hasLines) ? (
           <Slider label="Length" value={cfg.durationSec} min={1} max={600} onChange={(v) => set('durationSec', v)} format={(v) => `${v}s`} />

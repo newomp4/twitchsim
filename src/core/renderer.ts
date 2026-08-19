@@ -46,6 +46,15 @@ export interface RowAnim {
   scale: number
 }
 
+/** "start centered → drift down to fill": 1 while centred (hold), easing to 0 (bottom-anchored) over drift. */
+export function fillLiftK(tSec: number, hold: number, drift: number): number {
+  if (drift <= 0 || tSec <= hold) return 1
+  if (tSec >= hold + drift) return 0
+  const x = (tSec - hold) / drift
+  const eio = x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2 // easeInOutCubic
+  return 1 - eio
+}
+
 export function rowAnimation(style: AnimationStyle, age: number, animMs: number, width: number, ease: (t: number) => number = easeOutCubic): RowAnim {
   if (style === 'instant' || age >= animMs) return { grow: 1, alpha: 1, dx: 0, scale: 1 }
   const t = Math.max(0, age) / animMs
@@ -95,7 +104,7 @@ export class ChatRenderer {
   private styleKey(o: RenderOptions): string {
     const s = o.style
     const av = s.avatars
-    return [s.width, s.fontSize, s.lineHeight, s.fontFamily, s.theme, s.timestamps, s.showBadges, s.boldNames, s.readableColors, s.nameColorPalette ? s.nameColorPalette.join(',') : '~', s.letterSpacing, s.alternateBg, s.padX, s.modView, s.hypeTrain, o.hiRes, s.transparent, s.badgeRadius, Object.keys(s.badgeOverrides).join(','), av.mode, av.shape, Object.keys(av.byLogin).join(','), av.pool.length].join('|')
+    return [s.width, s.fontSize, s.lineHeight, s.fontFamily, s.theme, s.timestamps, s.showBadges, s.boldNames, s.readableColors, s.nameColorPalette ? s.nameColorPalette.join(',') : '~', s.letterSpacing, s.slideDistance, s.alternateBg, s.padX, s.modView, s.hypeTrain, o.hiRes, s.transparent, s.badgeRadius, Object.keys(s.badgeOverrides).join(','), av.mode, av.shape, Object.keys(av.byLogin).join(','), av.pool.length].join('|')
   }
 
   layoutFor(msg: ChatMessage, o: RenderOptions, tNow: number, index: number): RowLayout {
@@ -153,6 +162,12 @@ export class ChatRenderer {
     let clearT = -Infinity
     for (const c of tl.clears) if (c <= tMs + 1e-6) clearT = c
     let yBottom = H - s.paddingBottom
+    // "start centered, drift down to fill": lift the whole stack so the newest message sits on the vertical
+    // centre line early on, then ease it down to the bottom so the column fills the frame top-to-bottom
+    if (s.fillDown) {
+      const lift0 = Math.max(0, H / 2 - s.paddingBottom - s.lineHeight / 2)
+      yBottom -= lift0 * fillLiftK(tMs / 1000, s.fillHold, s.fillDrift)
+    }
     const animMs = Math.max(1, o.animationMs)
     // draw newest first (bottom) going up
     const toDraw: { layout: RowLayout; y: number; anim: RowAnim }[] = []
@@ -162,7 +177,7 @@ export class ChatRenderer {
       idx--
       if (m.t < clearT) continue // everything before the latest /clear is gone (the clear notice itself sits at clearT)
       const layout = this.layoutFor(m, o, tMs, idx + 1)
-      const anim = rowAnimation(o.animation, tMs - m.t, animMs, W, o.ease)
+      const anim = rowAnimation(o.animation, tMs - m.t, animMs, W * (s.slideDistance ?? 1), o.ease)
       const allotted = layout.height * anim.grow
       const yTop = yBottom - allotted
       toDraw.push({ layout, y: yTop, anim })

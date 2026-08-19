@@ -4,13 +4,14 @@
  * Sources, in order of precedence: pasted "Adobe After Effects 9.0 Keyframe Data" → a preset / custom
  * cubic-bézier → the default (easeOutCubic, matching Twitch-like motion).
  */
-export type EasePreset = 'smooth' | 'ease-out' | 'gentle' | 'linear' | 'snappy' | 'custom'
+export type EasePreset = 'smooth' | 'ease-out' | 'expo' | 'gentle' | 'linear' | 'snappy' | 'custom'
 
 /** cubic-bézier control points [x1, y1, x2, y2] (P0 = 0,0 and P3 = 1,1 are implied) */
 export type Bezier = [number, number, number, number]
 
 export const EASE_PRESETS: Record<Exclude<EasePreset, 'smooth' | 'custom'>, Bezier> = {
   'ease-out': [0, 0, 0.58, 1],
+  expo: [0.025, 0.451, 0.075, 1],
   gentle: [0.37, 0, 0.63, 1],
   linear: [0, 0, 1, 1],
   snappy: [0.6, 0, 0.15, 1],
@@ -19,6 +20,7 @@ export const EASE_PRESETS: Record<Exclude<EasePreset, 'smooth' | 'custom'>, Bezi
 export const EASE_PRESET_LABELS: { value: EasePreset; label: string }[] = [
   { value: 'smooth', label: 'Smooth — like Twitch (default)' },
   { value: 'ease-out', label: 'Ease out — fast, then settles' },
+  { value: 'expo', label: 'Snap — hard snap, long glide' },
   { value: 'gentle', label: 'Gentle — soft in and out' },
   { value: 'linear', label: 'Linear — constant speed' },
   { value: 'snappy', label: 'Snappy — quick and punchy' },

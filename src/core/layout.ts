@@ -29,6 +29,11 @@ export interface RenderStyle {
   nameColorPalette: readonly string[] | null
   /** kerning (letter spacing) in px */
   letterSpacing: number
+  /** slide entrance travel as a fraction of chat width */
+  slideDistance: number
+  fillDown: boolean
+  fillHold: number
+  fillDrift: number
   alternateBg: boolean
   textShadow: boolean
   textOutline: number
@@ -88,6 +93,10 @@ export function styleFromConfig(cfg: Config): RenderStyle {
     readableColors: cfg.readableColors,
     nameColorPalette: cfg.nameColorMode === 'custom' ? cfg.nameColorPalette : null,
     letterSpacing: cfg.letterSpacing ?? 0,
+    slideDistance: cfg.slideDistance ?? 1,
+    fillDown: !!cfg.fillDown,
+    fillHold: cfg.fillHold ?? 1,
+    fillDrift: cfg.fillDrift ?? 1.5,
     alternateBg: cfg.alternateBg,
     textShadow: cfg.textShadow && (cfg.chatStyle === 'transparent' || cfg.chatStyle === 'custom'),
     textOutline: cfg.chatStyle === 'transparent' || cfg.chatStyle === 'custom' ? cfg.textOutline : 0,

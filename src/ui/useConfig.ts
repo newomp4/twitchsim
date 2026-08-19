@@ -37,7 +37,7 @@ export function decodeShare(s: string): Partial<Config> | null {
 const ENUMS: Partial<Record<keyof Config, readonly string[]>> = {
   mode: ['script', 'ambient', 'mixed', 'hype'],
   mood: ['general', 'hype', 'chill', 'funny', 'gaming', 'wholesome', 'toxic', 'reactions', 'clutch', 'music', 'irl'],
-  pacing: ['natural', 'even'],
+  pacing: ['natural', 'even', 'accelerate'],
   chatStyle: ['twitch-dark', 'twitch-light', 'transparent', 'custom'],
   fontSize: ['small', 'default', 'large', 'xlarge'],
   animation: ['instant', 'slide-up', 'slide-left', 'slide-right', 'fade', 'pop', 'slide-fade', 'slide'],

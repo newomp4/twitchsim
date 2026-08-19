@@ -206,7 +206,17 @@ export function StylePanel({
           />
           {cfg.animation !== 'instant' && <Slider label="Duration" value={cfg.animationMs} min={60} max={800} step={10} onChange={(v) => set('animationMs', v)} format={(v) => `${v}ms`} />}
         </Row>
+        {(cfg.animation === 'slide-left' || cfg.animation === 'slide-right') && (
+          <Slider label="Slide distance" value={cfg.slideDistance} min={0.1} max={1} step={0.01} onChange={(v) => set('slideDistance', v)} format={(v) => `${Math.round(v * 100)}% of width`} hint="how far it flies in from — 33% ≈ a subtle slide from near the middle" />
+        )}
         {cfg.animation !== 'instant' && <EaseControl cfg={cfg} set={set} patch={patch} />}
+        <Toggle label="Fill down (start centered → drop to fill the screen)" value={cfg.fillDown} onChange={(v) => set('fillDown', v)} hint="cinematic: the newest message sits on the centre line, then the column drifts down to fill top-to-bottom" />
+        {cfg.fillDown && (
+          <Row>
+            <Slider label="Stay centered for" value={cfg.fillHold} min={0} max={5} step={0.1} onChange={(v) => set('fillHold', v)} format={(v) => `${v.toFixed(1)}s`} />
+            <Slider label="Drift down over" value={cfg.fillDrift} min={0.2} max={5} step={0.1} onChange={(v) => set('fillDrift', v)} format={(v) => `${v.toFixed(1)}s`} />
+          </Row>
+        )}
       </Section>
 
       <Section title="Badges & emotes">

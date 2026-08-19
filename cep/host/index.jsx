@@ -629,12 +629,12 @@ $.global.TWITCHSIM = (function () {
   function controlDefaults(data) {
     var bgd = data.background || { color: [0.09, 0.09, 0.1], opacity: 0, radius: 0 };
     var stroke = num(data.text.strokeWidth, 0);
-    var an = data.anim || { style: 2, ms: 300, slidePx: 340 };
+    var an = data.anim || { style: 2, ms: 300, slidePx: 340, slidePct: 100 };
     return [
       ['style', 'ADBE Dropdown Control', Math.max(1, Math.min(ANIM_STYLES.length, num(an.style, 2)))],
       ['dur', 'ADBE Slider Control', Math.round((num(an.ms, 300) / 1000) * data.fps * 100) / 100],
       ['ease', 'ADBE Slider Control', 100],
-      ['slide', 'ADBE Slider Control', 100],
+      ['slide', 'ADBE Slider Control', num(an.slidePct, 100)],
       ['pop', 'ADBE Slider Control', 70],
       ['gap', 'ADBE Slider Control', 0],
       ['opacity', 'ADBE Slider Control', 100],
@@ -878,6 +878,14 @@ $.global.TWITCHSIM = (function () {
   }
 
   /** Scroll null Y: baked hold keys (every instant push-up) + live growth transient and row gap */
+  /** the 'start centred, drift down to fill' offset for the Scroll null Y expression (or '' when off) */
+  function fillTerm() {
+    var f = st && st.data && st.data.fill;
+    if (!f || !f.liftPx) return '';
+    // K(time): 1 while centred (hold), easing to 0 over drift (easeInOutCubic); lift the null up by liftPx*K
+    return ' - ' + f.liftPx + ' * (function (t) { var h = ' + f.hold + ', d = ' + f.drift + '; if (d <= 0 || t <= h) return 1; if (t >= h + d) return 0; var x = (t - h) / d; var eio = x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; return 1 - eio; })(time)';
+  }
+
   function scrollExpression(clears) {
     var cl = [];
     for (var i = 0; i < (clears || []).length; i++) cl.push(String(clears[i]));
@@ -904,7 +912,7 @@ $.global.TWITCHSIM = (function () {
       '      if (g < 1) tr += (time >= parseFloat(a[4]) ? parseFloat(a[3]) : parseFloat(a[2])) * (1 - g);\n' +
       '    } else if (gap == 0) break;\n' +
       '  }\n' +
-      '  v = value - gap * Math.max(0, count - 1) + tr;\n' +
+      '  v = value - gap * Math.max(0, count - 1) + tr' + fillTerm() + ';\n' +
       '} catch (err) {}\nv'
     );
   }
