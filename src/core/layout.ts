@@ -81,9 +81,9 @@ export function styleFromConfig(cfg: Config): RenderStyle {
   }
   return {
     width: cfg.width * zoom,
-    height: cfg.height,
+    height: cfg.height * zoom,
     padX: cfg.paddingX * zoom,
-    padY: 4,
+    padY: (4 * fontSize) / 14, // scales with the text so rows keep their vertical rhythm at any size
     paddingBottom: cfg.paddingBottom * zoom,
     fontSize,
     lineHeight,
@@ -436,6 +436,7 @@ export function layoutMessage(msg: ChatMessage, env: LayoutEnv, tNow: number, in
   const { style } = env
   setLetterSpacing(style.letterSpacing)
   const fs = style.fontSize
+  const bw = (4 * fs) / 14 // the accent bar / small inline gaps, scaled with the text
   const fm = fontMetrics(fs, style.fontFamily)
   const c = style.colors
   const contentW = style.width - style.padX * 2
@@ -458,11 +459,11 @@ export function layoutMessage(msg: ChatMessage, env: LayoutEnv, tNow: number, in
     const barColor = kind === 'announcement' ? (n.color ?? c.accent) : style.hypeTrain ? c.hypeTrainGold : c.accentBorder
     const lh = style.noticeLineHeight
     const iconAtom = noticeIcon(kind!, fs, lh, fm, c)
-    const atoms: Atom[] = [iconAtom, { kind: 'gap', w: 4 }]
+    const atoms: Atom[] = [iconAtom, { kind: 'gap', w: bw }]
     atoms.push(...noticePartsToAtoms(n.parts, fs, lh, fm, style, c))
-    const innerW = contentW - 4 // 4px bar
+    const innerW = contentW - bw
     // the text sits in its own column right of the icon: flow it at that width, then indent the wrapped lines
-    const iconIndent = atomWidth(iconAtom) + 4
+    const iconIndent = atomWidth(iconAtom) + bw
     const headerLines = flow(atoms, innerW, textAbove(lh, fm), textBelow(lh, fm))
     if (headerLines.length > 1) {
       // re-flow the text part alone at the narrower column width, then put the icon back on line 0
@@ -487,18 +488,18 @@ export function layoutMessage(msg: ChatMessage, env: LayoutEnv, tNow: number, in
     }
     const headerH = headerLines.reduce((s, l) => s + l.height, 0)
     // block y is relative to the row's *content* top (the 4px margin is added by the renderer)
-    const blocks: Block[] = [{ y: style.padY, height: headerH, lines: headerLines, x: 4 + style.padX }]
+    const blocks: Block[] = [{ y: style.padY, height: headerH, lines: headerLines, x: bw + style.padX }]
     let y = style.padY + headerH
     if (msg.user && (msg.fragments.length > 0 || kind === 'announcement')) {
       const bodyAtoms = chatLineAtoms(msg, env, fm, false)
       const lines = flow(bodyAtoms, innerW, textAbove(style.lineHeight, fm), textBelow(style.lineHeight, fm))
       const bh = lines.reduce((s, l) => s + l.height, 0)
-      y += 4
-      blocks.push({ y, height: bh, lines, x: 4 + style.padX })
+      y += bw
+      blocks.push({ y, height: bh, lines, x: bw + style.padX })
       y += bh
     }
     const contentH = y + style.padY
-    return { height: contentH + 8, marginTop: 4, marginBottom: 4, bg: c.noticeBg, borderLeft: barColor, borderWidth: 4, msgId: msg.id, blocks }
+    return { height: contentH + bw * 2, marginTop: bw, marginBottom: bw, bg: c.noticeBg, borderLeft: barColor, borderWidth: bw, msgId: msg.id, blocks }
   }
 
   // ---- regular chat line ----
@@ -514,8 +515,8 @@ export function layoutMessage(msg: ChatMessage, env: LayoutEnv, tNow: number, in
     bg = c.noticeBg
     borderLeft = c.special
   }
-  const bodyX = borderLeft ? style.padX + 4 : style.padX
-  const innerW = borderLeft ? contentW - 4 : contentW
+  const bodyX = borderLeft ? style.padX + bw : style.padX
+  const innerW = borderLeft ? contentW - bw : contentW
 
   // headers
   const headerLH = style.noticeLineHeight
@@ -527,7 +528,7 @@ export function layoutMessage(msg: ChatMessage, env: LayoutEnv, tNow: number, in
     const full = `Replying to @${msg.reply.displayName}: ${msg.reply.text}`
     const avail = innerW - atomWidth(icon) - 4
     const text = ellipsize(full, hdrStyle.font, avail)
-    const atoms: Atom[] = [icon, { kind: 'gap', w: 4 }, { kind: 'text', text, w: measure(text, hdrStyle.font), style: hdrStyle, above: textAbove(headerLH, fm), below: textBelow(headerLH, fm) }]
+    const atoms: Atom[] = [icon, { kind: 'gap', w: bw }, { kind: 'text', text, w: measure(text, hdrStyle.font), style: hdrStyle, above: textAbove(headerLH, fm), below: textBelow(headerLH, fm) }]
     const lines = flow(atoms, innerW + 1000, textAbove(headerLH, fm), textBelow(headerLH, fm))
     const h = lines.reduce((s, l) => s + l.height, 0)
     blocks.push({ y, height: h, lines, x: bodyX })
@@ -539,7 +540,7 @@ export function layoutMessage(msg: ChatMessage, env: LayoutEnv, tNow: number, in
     const sz = 16 * scale
     const icon: Atom = { kind: 'image', url: '', urlHi: '', w: sz, h: sz, boxW: sz, above: fm.xHeight / 2 + sz / 2, below: sz / 2 - fm.xHeight / 2, role: 'icon', name: 'special', iconPath, iconColor: c.textAlt2 }
     const st: TextStyle = { font: fontString(600, fs * 0.86, style.fontFamily), color: c.textAlt2 }
-    const atoms: Atom[] = [icon, { kind: 'gap', w: 4 }, { kind: 'text', text: label, w: measure(label, st.font), style: st, above: textAbove(headerLH, fm), below: textBelow(headerLH, fm) }]
+    const atoms: Atom[] = [icon, { kind: 'gap', w: bw }, { kind: 'text', text: label, w: measure(label, st.font), style: st, above: textAbove(headerLH, fm), below: textBelow(headerLH, fm) }]
     const lines = flow(atoms, innerW, textAbove(headerLH, fm), textBelow(headerLH, fm))
     const h = lines.reduce((s, l) => s + l.height, 0)
     blocks.push({ y, height: h, lines, x: bodyX })
@@ -550,7 +551,7 @@ export function layoutMessage(msg: ChatMessage, env: LayoutEnv, tNow: number, in
     const icon: Atom = { kind: 'image', url: '', urlHi: '', w: sz, h: sz, boxW: sz, above: fm.xHeight / 2 + sz / 2, below: sz / 2 - fm.xHeight / 2, role: 'icon', name: 'points', iconPath: ICONS.points, iconColor: c.textAlt2 }
     const st: TextStyle = { font: fontString(400, fs * 0.93, style.fontFamily), color: c.textAlt2 }
     const label = ellipsize(`Redeemed ${msg.rewardName}`, st.font, innerW - sz - 4)
-    const atoms: Atom[] = [icon, { kind: 'gap', w: 4 }, { kind: 'text', text: label, w: measure(label, st.font), style: st, above: textAbove(headerLH, fm), below: textBelow(headerLH, fm) }]
+    const atoms: Atom[] = [icon, { kind: 'gap', w: bw }, { kind: 'text', text: label, w: measure(label, st.font), style: st, above: textAbove(headerLH, fm), below: textBelow(headerLH, fm) }]
     const lines = flow(atoms, innerW + 1000, textAbove(headerLH, fm), textBelow(headerLH, fm))
     const h = lines.reduce((s, l) => s + l.height, 0)
     blocks.push({ y, height: h, lines, x: bodyX })
@@ -564,7 +565,7 @@ export function layoutMessage(msg: ChatMessage, env: LayoutEnv, tNow: number, in
   if (msg.highlighted && !deleted) block.bodyPill = { color: c.highlightBodyBg, asc: fm.asc, desc: fm.desc }
   blocks.push(block)
   y += bh
-  return { height: y + style.padY, marginTop: 0, marginBottom: 0, bg, borderLeft, borderWidth: borderLeft ? 4 : 0, effect: deleted ? undefined : msg.effect, msgId: msg.id, blocks }
+  return { height: y + style.padY, marginTop: 0, marginBottom: 0, bg, borderLeft, borderWidth: borderLeft ? bw : 0, effect: deleted ? undefined : msg.effect, msgId: msg.id, blocks }
 }
 
 function textAbove(lh: number, fm: FontMetrics): number {
@@ -653,7 +654,7 @@ function chatLineAtoms(msg: ChatMessage, env: LayoutEnv, fm: FontMetrics, delete
     const st: TextStyle = { font: fontString(400, fs, style.fontFamily), color: c.timestamp }
     const text = formatTimestamp(msg.t)
     atoms.push({ kind: 'text', text, w: measure(text, st.font), style: st, above, below })
-    atoms.push({ kind: 'gap', w: 4 })
+    atoms.push({ kind: 'gap', w: 4 * scale })
   }
   // badges + name group (inline-block => unbreakable)
   const group: Atom[] = []
@@ -713,7 +714,8 @@ function chatLineAtoms(msg: ChatMessage, env: LayoutEnv, fm: FontMetrics, delete
 
   const bodyColor = deleted ? c.deleted : msg.action ? color : msg.highlighted ? '#ffffff' : c.text
   // the AE "custom text colour" override recolours plain body text — not a deleted notice or a /me line (name-coloured)
-  const bodyStyle: TextStyle = { font: fontString(400, fs, style.fontFamily), color: bodyColor, italic: deleted, role: deleted || msg.action ? undefined : 'body' }
+  // deleted lines are drawn italic — bake it into the font string so the measured width matches the drawn width
+  const bodyStyle: TextStyle = { font: fontString(400, fs, style.fontFamily, deleted), color: bodyColor, italic: deleted, role: deleted || msg.action ? undefined : 'body' }
   if (!msg.action) {
     atoms.push({ kind: 'text', text: ':', w: measure(':', bodyStyle.font), style: { font: bodyStyle.font, color: msg.highlighted ? '#ffffff' : c.text, role: 'body' }, above, below })
   }

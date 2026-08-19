@@ -43,7 +43,7 @@ export function computeGeometry(cfg: Config): ExportGeometry {
   // chatScale zooms the chat column width (matching styleFromConfig); exportScale is the output resolution
   const zoom = Math.max(0.05, cfg.chatScale ?? 1)
   const chatW = Math.round(cfg.width * zoom * scale)
-  const chatH = Math.round(cfg.height * scale)
+  const chatH = Math.round(cfg.height * zoom * scale)
   let outW = chatW
   let outH = chatH
   let chatX = 0

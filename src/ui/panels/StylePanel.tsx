@@ -149,14 +149,20 @@ export function StylePanel({
   const streamerNameRef = useRef(cfg.streamerName)
   streamerNameRef.current = cfg.streamerName
   const pct = (v: number) => `${Math.round(v * 100)}%`
-  // "fill the frame width": how wide the frame/comp is (0 when the output is just the chat itself)
+  // frame / comp size (0 when the output is just the chat itself, i.e. the 'chat' preset)
   const frameW = cfg.framePreset === 'chat' ? 0 : cfg.framePreset === 'custom' ? cfg.frameW : FRAME_PRESETS[cfg.framePreset]?.w ?? 0
-  const chatOutW = cfg.width * (cfg.chatScale ?? 1) * cfg.exportScale // chat column width in output px
-  const fillWidth = () => {
-    if (!frameW) return
-    const target = Math.max(frameW * 0.4, frameW - 2 * cfg.marginX) // leave the current side margin
-    const z = target / (cfg.width * cfg.exportScale)
-    set('chatScale', Math.round(Math.max(0.2, Math.min(20, z)) * 100) / 100)
+  const frameH = cfg.framePreset === 'chat' ? 0 : cfg.framePreset === 'custom' ? cfg.frameH : FRAME_PRESETS[cfg.framePreset]?.h ?? 0
+  // "Fit to the frame": make the chat AREA match the frame (a tall chat can't proportionally fill a wide 16:9
+  // frame, so set width/height independently) and pick a readable text size. Overall zoom stays 1× so nothing clips.
+  const fitToFrame = () => {
+    if (!frameW || !frameH) return
+    const s = Math.max(0.1, cfg.exportScale)
+    patch({
+      chatScale: 1,
+      width: Math.max(120, Math.round((frameW - 2 * cfg.marginX) / s)),
+      height: Math.max(80, Math.round((frameH - 2 * cfg.marginY) / s)),
+      fontScale: Math.round(((0.05 * frameH) / (14 * s)) * 100) / 100, // ~5% of the frame height
+    })
   }
   return (
     <>
@@ -204,15 +210,15 @@ export function StylePanel({
         <Field label="Font size (Twitch chat setting)">
           <Segmented value={cfg.fontSize} onChange={(v) => set('fontSize', v)} options={[{ value: 'small', label: 'Small' }, { value: 'default', label: 'Default' }, { value: 'large', label: 'Bigger' }, { value: 'xlarge', label: 'Biggest' }]} />
         </Field>
-        <Field label="Chat size — scale the whole chat" hint="Grows the message column, text, badges and spacing together, so the chat gets bigger without changing its look. Use this to match a full-screen layout; the export resolution is separate.">
-          <Slider label="Scale" value={cfg.chatScale} min={0.5} max={8} step={0.05} onChange={(v) => set('chatScale', v)} format={(v) => `${v.toFixed(2)}×`} />
+        <Field label="Chat size & placement" hint="Overall zoom scales the whole chat — text, badges, column width AND height — together (nothing clips). For a full screen, set a comp size then click “Fit to the frame”; in After Effects you can also move / scale / rotate the “TwitchSim Controls” null to place and keyframe the whole chat.">
+          <Slider label="Overall zoom" value={cfg.chatScale} min={0.5} max={4} step={0.05} onChange={(v) => set('chatScale', v)} format={(v) => `${v.toFixed(2)}×`} />
           {frameW > 0 ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
-              <button type="button" className="btn small" onClick={fillWidth}>Fill the frame width</button>
-              <span className="fhint">Chat is {Math.round(chatOutW)}px — {Math.round((chatOutW / frameW) * 100)}% of the {frameW}px frame.</span>
+              <button type="button" className="btn small" onClick={fitToFrame}>Fit to the {frameW}×{frameH} frame</button>
+              <span className="fhint">Sets the chat area to the frame with big, readable text. Then fine-tune with Overall zoom, or move / scale the Controls null in AE.</span>
             </div>
           ) : (
-            <span className="fhint">Pick a frame / comp size (1080p, 1440p…) — in the Export tab, or “Comp size” in After Effects — to fill a full screen; right now the output is just the chat column.</span>
+            <span className="fhint">Pick a frame / comp size (1080p, 1440p…) — in the Export tab, or “Comp size” in After Effects — to fit a full screen; right now the output is just the chat column.</span>
           )}
         </Field>
         <Slider label="Letter spacing (kerning)" value={cfg.letterSpacing} min={-1} max={4} step={0.1} onChange={(v) => set('letterSpacing', v)} format={(v) => (Math.abs(v) < 0.05 ? 'none' : `${v > 0 ? '+' : ''}${v.toFixed(1)}px`)} hint="space between letters in the names and messages — negative tightens, positive spreads them out" />
@@ -304,7 +310,7 @@ export function StylePanel({
           <NumberInput label="Exact height (px)" value={cfg.height} min={40} max={4000} onChange={(v) => set('height', Math.round(v))} />
         </Row>
         <Row>
-          <Slider label="Extra scale (text + badges + emotes)" value={cfg.fontScale} min={0.6} max={2.5} step={0.05} onChange={(v) => set('fontScale', v)} format={(v) => `${v.toFixed(2)}×`} />
+          <Slider label="Text size (text + badges + emotes)" value={cfg.fontScale} min={0.6} max={10} step={0.05} onChange={(v) => set('fontScale', v)} format={(v) => `${v.toFixed(2)}×`} hint="how big the text is within the chat column — raise it for a full-screen look" />
           <Slider label="Panel corner radius" value={cfg.cornerRadius} min={0} max={40} onChange={(v) => set('cornerRadius', v)} format={(v) => `${v}px`} hint="rounds the chat panel itself (no effect on the Transparent look)" />
         </Row>
         <Row>

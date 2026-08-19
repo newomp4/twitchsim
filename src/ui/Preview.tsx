@@ -101,6 +101,10 @@ export function Preview({ cfg, timeline, assets, player, zoom, fontsVersion = 0 
   // a new timeline re-uses message ids from 1: drop cached layouts (also when a font arrived late)
   useEffect(() => renderer.invalidate(), [renderer, timeline, fontsVersion])
   const style = useMemo(() => styleFromConfig(cfg), [cfg])
+  // the on-screen chat size is the ZOOMED chat (styleFromConfig applies chatScale) — the canvas, CSS box
+  // and fit-scale must all use these, or a zoomed chat would show only its top-left corner
+  const vw = style.width
+  const vh = style.height
   const ease = useMemo(() => easeFunction(cfg), [cfg])
   const scrollEase = useMemo(() => (cfg.scrollEasePreset && cfg.scrollEasePreset !== 'match' ? easeFromPreset(cfg.scrollEasePreset, cfg.easeCurve) : undefined), [cfg])
   const [fitScale, setFitScale] = useState(1)
@@ -113,12 +117,12 @@ export function Preview({ cfg, timeline, assets, player, zoom, fontsVersion = 0 
     const ro = new ResizeObserver(() => {
       const r = el.getBoundingClientRect()
       // 16px padding each side, plus the meta line + gap under the stage
-      const s = Math.min((r.width - 32) / cfg.width, (r.height - 32 - 28) / cfg.height)
+      const s = Math.min((r.width - 32) / vw, (r.height - 32 - 28) / vh)
       setFitScale(Math.max(0.1, Math.min(4, s)))
     })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [cfg.width, cfg.height])
+  }, [vw, vh])
   const zoomScale = zoom === 'fit' ? fitScale : zoom === 'auto' ? Math.min(1, fitScale) : zoom
 
   // draw loop (depends on the player's stable refs, not the player object — that changes ~12×/s while playing)
@@ -128,8 +132,8 @@ export function Preview({ cfg, timeline, assets, player, zoom, fontsVersion = 0 
     if (!canvas) return
     // supersample: at least 2 device pixels per CSS px so text stays crisp even on 1× displays
     const pxScale = Math.min(4, Math.max(2, dpr) * Math.max(0.5, zoomScale))
-    canvas.width = Math.round(cfg.width * pxScale)
-    canvas.height = Math.round(cfg.height * pxScale)
+    canvas.width = Math.round(vw * pxScale)
+    canvas.height = Math.round(vh * pxScale)
     const ctx = canvas.getContext('2d', { alpha: true })!
     let dirty = true
     let lastT = -1
@@ -153,11 +157,11 @@ export function Preview({ cfg, timeline, assets, player, zoom, fontsVersion = 0 
   const geo = computeGeometry(cfg)
   return (
     <div className="preview-wrap" ref={wrapRef}>
-      <div className={'preview-stage' + (style.transparent || (cfg.chatStyle === 'custom' && cfg.bgOpacity < 1) ? ' checker' : '')} style={{ width: cfg.width * zoomScale, height: cfg.height * zoomScale }}>
-        <canvas ref={canvasRef} style={{ width: cfg.width * zoomScale, height: cfg.height * zoomScale }} />
+      <div className={'preview-stage' + (style.transparent || (cfg.chatStyle === 'custom' && cfg.bgOpacity < 1) ? ' checker' : '')} style={{ width: vw * zoomScale, height: vh * zoomScale }}>
+        <canvas ref={canvasRef} style={{ width: vw * zoomScale, height: vh * zoomScale }} />
       </div>
       <div className="preview-meta">
-        {cfg.width}×{cfg.height} px chat · export {geo.outW}×{geo.outH} @ {cfg.exportFps}fps · {timeline.messages.length} messages · {(timeline.durationMs / 1000).toFixed(1)}s
+        {Math.round(vw)}×{Math.round(vh)} px chat · export {geo.outW}×{geo.outH} @ {cfg.exportFps}fps · {timeline.messages.length} messages · {(timeline.durationMs / 1000).toFixed(1)}s
       </div>
     </div>
   )
