@@ -17,6 +17,8 @@ export interface RenderOptions {
   forceBg?: string | null
   /** entrance easing curve y(t) (defaults to easeOutCubic) */
   ease?: (t: number) => number
+  /** the scroll (room-making) easing curve; defaults to `ease` (coupled) */
+  scrollEase?: (t: number) => number
 }
 
 interface CacheEntry {
@@ -47,6 +49,14 @@ export interface RowAnim {
 }
 
 /** "start centered → drift down to fill": 1 while centred (hold), easing to 0 (bottom-anchored) over drift. */
+/** Room-making (stack) growth on the scroll's own clock — used when the scroll is decoupled from the entrance. */
+export function rowStackGrow(style: AnimationStyle, age: number, dur: number, ease?: (t: number) => number): number {
+  if (style === 'instant') return age > 0 ? 1 : 0
+  if (age <= 0) return 0
+  if (age >= dur) return 1
+  return (ease ?? easeOutCubic)(age / dur)
+}
+
 export function fillLiftK(tSec: number, hold: number, drift: number): number {
   if (drift <= 0 || tSec <= hold) return 1
   if (tSec >= hold + drift) return 0
@@ -158,7 +168,9 @@ export class ChatRenderer {
 
     // visible window
     const msgs = tl.messages
-    let hi = upperBound(msgs, tMs + 1e-6) // first index with t > tMs (+ε: an arrival exactly on a frame is on that frame)
+    const lead = Math.max(0, s.scrollLead ?? 0)
+    // the list opens room `lead` ms before a message slides in: include soon-to-arrive rows (drawn invisibly)
+    let hi = upperBound(msgs, tMs + lead + 1e-6)
     let clearT = -Infinity
     for (const c of tl.clears) if (c <= tMs + 1e-6) clearT = c
     let yBottom = H - s.paddingBottom
@@ -178,7 +190,15 @@ export class ChatRenderer {
       if (m.t < clearT) continue // everything before the latest /clear is gone (the clear notice itself sits at clearT)
       const layout = this.layoutFor(m, o, tMs, idx + 1)
       const anim = rowAnimation(o.animation, tMs - m.t, animMs, W * (s.slideDistance ?? 1), o.ease)
-      const allotted = layout.height * anim.grow
+      // a message included only to pre-open its room (arrives up to `lead` ms from now) stays invisible
+      // until its own entrance begins — otherwise a no-fade style (slide-up) would paint it fully opaque early
+      if (m.t > tMs) anim.alpha = 0
+      // the stack (room-making) grows on its own clock: the scroll ease/duration, shifted earlier by the lead.
+      // Decoupled from the message's horizontal entrance so the room can lead the slide-in.
+      const scrollDur = (s.scrollDurationMs ?? 0) > 0 ? s.scrollDurationMs : animMs
+      const scrollEase = o.scrollEase ?? o.ease ?? undefined
+      const stackGrow = lead > 0 || (s.scrollDurationMs ?? 0) > 0 || o.scrollEase ? Math.max(0, Math.min(1, rowStackGrow(o.animation, tMs - m.t + lead, scrollDur, scrollEase))) : anim.grow
+      const allotted = layout.height * stackGrow
       const yTop = yBottom - allotted
       toDraw.push({ layout, y: yTop, anim })
       yBottom = yTop

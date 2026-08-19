@@ -34,6 +34,8 @@ export interface RenderStyle {
   fillDown: boolean
   fillHold: number
   fillDrift: number
+  scrollLead: number
+  scrollDurationMs: number
   alternateBg: boolean
   textShadow: boolean
   textOutline: number
@@ -97,6 +99,8 @@ export function styleFromConfig(cfg: Config): RenderStyle {
     fillDown: !!cfg.fillDown,
     fillHold: cfg.fillHold ?? 1,
     fillDrift: cfg.fillDrift ?? 1.5,
+    scrollLead: cfg.scrollLead ?? 0,
+    scrollDurationMs: cfg.scrollDurationMs ?? 0,
     alternateBg: cfg.alternateBg,
     textShadow: cfg.textShadow && (cfg.chatStyle === 'transparent' || cfg.chatStyle === 'custom'),
     textOutline: cfg.chatStyle === 'transparent' || cfg.chatStyle === 'custom' ? cfg.textOutline : 0,

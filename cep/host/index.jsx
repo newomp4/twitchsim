@@ -202,7 +202,24 @@ $.global.TWITCHSIM = (function () {
       'function BACK(x) { var c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); }\n' +
       'function GROW(st, age, dur, e) { if (st == 1) return 1; if (age <= 0) return 0; if (age >= dur) return 1; if (st == 4) return Math.min(1, 3 * age / dur); return P(age / dur, e); }\n' +
       'function TS(L) { try { for (var q = 1; q <= L.marker.numKeys; q++) { var ch = L.marker.key(q).chapter; if (ch.indexOf("ts ") == 0) return ch.split(" "); } } catch (e) {} return null; }\n' +
-      'function CTL(C, n, f, t) { var p; try { p = C.effect(' + q(PSEUDO) + ')(n); } catch (e) { p = C.effect(f)(1); } return t === undefined ? p.value : p.valueAtTime(t); }\n'
+      'function CTL(C, n, f, t) { var p; try { p = C.effect(' + q(PSEUDO) + ')(n); } catch (e) { p = C.effect(f)(1); } return t === undefined ? p.value : p.valueAtTime(t); }\n' +
+      scrollLib()
+    );
+  }
+  /** decoupled scroll (room-making) growth: its own easing, duration and lead. '' when coupled to the entrance. */
+  function scrollLib() {
+    var sa = st && st.data && st.data.scrollAnim;
+    if (!sa) return '';
+    var es;
+    if (sa.ease && sa.ease.length) {
+      es = 'function ES(x) { if (x <= 0) return 0; if (x >= 1) return 1; var S = [' + sa.ease.join(',') + ']; var n = S.length - 1; var p = x * n; var i = Math.floor(p); return S[i] + (S[i + 1] - S[i]) * (p - i); }\n';
+    } else {
+      es = 'function ES(x) { return 1 - Math.pow(1 - x, 3); }\n';
+    }
+    return (
+      es +
+      'var SLEAD = ' + num(sa.lead, 0) + ', SDUR = ' + Math.max(0.001, num(sa.dur, 0.3)) + ';\n' +
+      'function GROWS(ra, d) { if (ra <= 0) return 0; if (ra >= d) return 1; return ES(ra / d); }\n'
     );
   }
   /** the entrance parameters of the row that arrived at t0 (sampled at its arrival, so keyframed controls apply per row) */
@@ -815,6 +832,7 @@ $.global.TWITCHSIM = (function () {
    */
   function messageExpressions(ml, msg) {
     // CAP (s): rows older than this are settled whatever the controls say - the live Duration is clamped to it
+    var dec = !!(st && st.data && st.data.scrollAnim);
     var lit = 'var t0 = ' + msg.t0 + ', e0 = ' + msg.epochStart + ', idx = ' + num(msg.idx, 0) + ', CW = ' + st.data.chat.w + ';\n';
     var head = lit + exprLib() + 'var v = value;\ntry {\n  var C = ' + ctlRef(true) + ';\n  var CAP = 6;\n';
     var tail = '} catch (err) {}\nv';
@@ -829,10 +847,15 @@ $.global.TWITCHSIM = (function () {
       '    var tk = parseFloat(a[1]);\n' +
       '    if (tk < e0) break;\n' + // older than my /clear: everything below is older still
       '    if (tk > t0) continue;\n' +
-      '    var age = time - tk;\n' +
-      '    if (age >= CAP) break;\n' + // layers are in arrival order: the rest is older
-      '    if (age < 0) continue;\n' +
-      '    ' + exprAnimAt('tk').replace(/\n/g, '\n    ') + 'var g = GROW(st, age, dur, e);\n' +
+      (dec
+        ? '    var ra = time - tk + SLEAD;\n' +
+          '    if (ra >= CAP) break;\n' +
+          '    if (ra <= 0) continue;\n' +
+          '    var g = GROWS(ra, SDUR);\n'
+        : '    var age = time - tk;\n' +
+          '    if (age >= CAP) break;\n' +
+          '    if (age < 0) continue;\n' +
+          '    ' + exprAnimAt('tk').replace(/\n/g, '\n    ') + 'var g = GROW(st, age, dur, e);\n') +
       '    if (g < 1) tr += (time >= parseFloat(a[4]) ? parseFloat(a[3]) : parseFloat(a[2])) * (1 - g);\n' +
       '  }\n' +
       '  v = value + gap * idx - tr;\n' +
@@ -889,6 +912,7 @@ $.global.TWITCHSIM = (function () {
   function scrollExpression(clears) {
     var cl = [];
     for (var i = 0; i < (clears || []).length; i++) cl.push(String(clears[i]));
+    var dec = !!(st && st.data && st.data.scrollAnim);
     return (
       'var clears = [' + cl.join(', ') + '];\n' +
       exprLib() +
@@ -904,13 +928,21 @@ $.global.TWITCHSIM = (function () {
       '    if (!a) continue;\n' +
       '    var tk = parseFloat(a[1]);\n' +
       '    if (tk < e0) break;\n' +
-      '    if (tk > time) continue;\n' +
-      '    var age = time - tk;\n' +
-      '    if (gap != 0) count++;\n' +
-      '    if (age < CAP) {\n' +
-      '      ' + exprAnimAt('tk').replace(/\n/g, '\n      ') + 'var g = GROW(st, age, dur, e);\n' +
-      '      if (g < 1) tr += (time >= parseFloat(a[4]) ? parseFloat(a[3]) : parseFloat(a[2])) * (1 - g);\n' +
-      '    } else if (gap == 0) break;\n' +
+      (dec
+        ? '    if (tk > time + SLEAD) continue;\n' +
+          '    var ra = time - tk + SLEAD;\n' +
+          '    if (gap != 0) count++;\n' +
+          '    if (ra < CAP) {\n' +
+          '      var g = GROWS(ra, SDUR);\n' +
+          '      if (g < 1) tr += (time >= parseFloat(a[4]) ? parseFloat(a[3]) : parseFloat(a[2])) * (1 - g);\n' +
+          '    } else if (gap == 0) break;\n'
+        : '    if (tk > time) continue;\n' +
+          '    var age = time - tk;\n' +
+          '    if (gap != 0) count++;\n' +
+          '    if (age < CAP) {\n' +
+          '      ' + exprAnimAt('tk').replace(/\n/g, '\n      ') + 'var g = GROW(st, age, dur, e);\n' +
+          '      if (g < 1) tr += (time >= parseFloat(a[4]) ? parseFloat(a[3]) : parseFloat(a[2])) * (1 - g);\n' +
+          '    } else if (gap == 0) break;\n') +
       '  }\n' +
       '  v = value - gap * Math.max(0, count - 1) + tr' + fillTerm() + ';\n' +
       '} catch (err) {}\nv'

@@ -23,7 +23,7 @@ import { frameAt } from '../core/assets'
 import { styleFromConfig, layoutMessage, fontMetrics, measure, type RowLayout, type Atom, type TextStyle, type LineBox, type RenderStyle } from '../core/layout'
 import { computeGeometry } from '../export/exporter'
 import { drawEffect } from '../core/renderer'
-import { easeSamples } from '../core/easing'
+import { easeSamples, samplesFromFn, easeFromPreset } from '../core/easing'
 
 // ---------------------------------------------------------------------------
 // Output types (kept JSON-friendly and ES3-friendly for the host script)
@@ -111,6 +111,8 @@ export interface SceneData {
   fill: { liftPx: number; hold: number; drift: number } | null
   /** entrance easing sampled 0..1 (65 points), or null = the host's built-in easeOutCubic */
   ease: number[] | null
+  /** decoupled scroll (room-making) timing — null when it's coupled to the entrance */
+  scrollAnim: { lead: number; dur: number; ease: number[] | null } | null
   /** /clear times (comp seconds) — the Scroll expression counts rows per epoch */
   clears: number[]
   /** hold keys: the stack's instant push-ups (arrivals, deletions, clears); the growth transient is an expression */
@@ -664,6 +666,14 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
     anim: { style: ANIM_STYLE_INDEX[cfg.animation] ?? 2, ms: Math.max(1, cfg.animationMs), slidePx: r3(W * s), slidePct: r3((cfg.slideDistance ?? 1) * 100) },
     fill: cfg.fillDown ? { liftPx: r3(Math.max(0, H / 2 - pb - style.lineHeight / 2) * s), hold: r3(cfg.fillHold ?? 1), drift: r3(cfg.fillDrift ?? 1.5) } : null,
     ease: easeSamples(cfg)?.map((v) => r3(v)) ?? null,
+    scrollAnim: (() => {
+      const lead = Math.max(0, cfg.scrollLead ?? 0) / 1000
+      const decoupled = lead > 0 || (cfg.scrollDurationMs ?? 0) > 0 || (cfg.scrollEasePreset && cfg.scrollEasePreset !== 'match')
+      if (!decoupled) return null
+      const dur = ((cfg.scrollDurationMs ?? 0) > 0 ? cfg.scrollDurationMs : Math.max(1, cfg.animationMs)) / 1000
+      const scEase = cfg.scrollEasePreset && cfg.scrollEasePreset !== 'match' ? samplesFromFn(easeFromPreset(cfg.scrollEasePreset, cfg.easeCurve)) : (easeSamples(cfg) ?? null)
+      return { lead: r3(lead), dur: r3(dur), ease: scEase ? scEase.map((v) => r3(v)) : null }
+    })(),
     clears: clears.filter((c) => c > 0 && c <= durationSec),
     scroll,
     assets: writer.assets,

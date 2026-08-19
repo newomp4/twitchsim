@@ -259,6 +259,12 @@ export interface Config {
   fillDown: boolean
   fillHold: number
   fillDrift: number
+  /** the list scroll (making room) leads the message by this many ms; 0 = coupled to the entrance */
+  scrollLead: number
+  /** the scroll's own duration in ms (0 = match the entrance duration) */
+  scrollDurationMs: number
+  /** the scroll's own easing preset, or 'match' to use the entrance easing */
+  scrollEasePreset: EasePreset | 'match'
   fadeTopEdge: number
   modView: boolean
   hypeTrain: boolean

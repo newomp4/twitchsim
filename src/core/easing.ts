@@ -4,7 +4,7 @@
  * Sources, in order of precedence: pasted "Adobe After Effects 9.0 Keyframe Data" → a preset / custom
  * cubic-bézier → the default (easeOutCubic, matching Twitch-like motion).
  */
-export type EasePreset = 'smooth' | 'ease-out' | 'expo' | 'gentle' | 'linear' | 'snappy' | 'custom'
+export type EasePreset = 'smooth' | 'ease-out' | 'expo' | 'inout' | 'gentle' | 'linear' | 'snappy' | 'custom'
 
 /** cubic-bézier control points [x1, y1, x2, y2] (P0 = 0,0 and P3 = 1,1 are implied) */
 export type Bezier = [number, number, number, number]
@@ -12,6 +12,7 @@ export type Bezier = [number, number, number, number]
 export const EASE_PRESETS: Record<Exclude<EasePreset, 'smooth' | 'custom'>, Bezier> = {
   'ease-out': [0, 0, 0.58, 1],
   expo: [0.025, 0.451, 0.075, 1],
+  inout: [0.576, 0, 0.387, 1],
   gentle: [0.37, 0, 0.63, 1],
   linear: [0, 0, 1, 1],
   snappy: [0.6, 0, 0.15, 1],
@@ -21,6 +22,7 @@ export const EASE_PRESET_LABELS: { value: EasePreset; label: string }[] = [
   { value: 'smooth', label: 'Smooth — like Twitch (default)' },
   { value: 'ease-out', label: 'Ease out — fast, then settles' },
   { value: 'expo', label: 'Snap — hard snap, long glide' },
+  { value: 'inout', label: 'In-out — smooth both ends' },
   { value: 'gentle', label: 'Gentle — soft in and out' },
   { value: 'linear', label: 'Linear — constant speed' },
   { value: 'snappy', label: 'Snappy — quick and punchy' },
@@ -134,6 +136,22 @@ interface EaseConfig {
   easePreset: EasePreset
   easeCurve: Bezier
   easeKeyframes: string
+}
+
+/** An easing fn from a preset alone (used by the scroll ease). */
+export function easeFromPreset(preset: EasePreset, curve?: Bezier): (t: number) => number {
+  if (preset === 'smooth') return easeOutCubic
+  const c = preset === 'custom' ? (curve ?? [0.22, 1, 0.36, 1]) : EASE_PRESETS[preset]
+  if (!Array.isArray(c) || c.length < 4) return easeOutCubic
+  return cubicBezier(c[0], c[1], c[2], c[3])
+}
+
+/** Sample any easing fn to a 65-point array (for baking into AE), clamped to [0,1]. */
+export function samplesFromFn(f: (t: number) => number): number[] {
+  const N = 65
+  const out: number[] = new Array(N)
+  for (let i = 0; i < N; i++) out[i] = Math.max(0, Math.min(1, f(i / (N - 1))))
+  return out
 }
 
 /** The entrance easing as a JS function y(t), t in [0,1]. */
