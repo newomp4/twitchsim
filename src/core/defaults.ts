@@ -89,6 +89,7 @@ export const DEFAULT_CONFIG: Config = {
   textOutline: 0,
   fontSize: 'default',
   fontScale: 1,
+  letterSpacing: 0,
   fontFamily: 'Inter',
   width: 340,
   height: 600,

@@ -95,7 +95,7 @@ export class ChatRenderer {
   private styleKey(o: RenderOptions): string {
     const s = o.style
     const av = s.avatars
-    return [s.width, s.fontSize, s.lineHeight, s.fontFamily, s.theme, s.timestamps, s.showBadges, s.boldNames, s.readableColors, s.nameColorPalette ? s.nameColorPalette.join(',') : '~', s.alternateBg, s.padX, s.modView, s.hypeTrain, o.hiRes, s.transparent, s.badgeRadius, Object.keys(s.badgeOverrides).join(','), av.mode, av.shape, Object.keys(av.byLogin).join(','), av.pool.length].join('|')
+    return [s.width, s.fontSize, s.lineHeight, s.fontFamily, s.theme, s.timestamps, s.showBadges, s.boldNames, s.readableColors, s.nameColorPalette ? s.nameColorPalette.join(',') : '~', s.letterSpacing, s.alternateBg, s.padX, s.modView, s.hypeTrain, o.hiRes, s.transparent, s.badgeRadius, Object.keys(s.badgeOverrides).join(','), av.mode, av.shape, Object.keys(av.byLogin).join(','), av.pool.length].join('|')
   }
 
   layoutFor(msg: ChatMessage, o: RenderOptions, tNow: number, index: number): RowLayout {
@@ -281,6 +281,8 @@ export class ChatRenderer {
     ctx.font = st.italic ? st.font.replace(/^(?!italic)/, 'italic ') : st.font
     ctx.textBaseline = 'alphabetic'
     ctx.textAlign = 'left'
+    const lc = ctx as Ctx2D & { letterSpacing?: string }
+    if ('letterSpacing' in lc) lc.letterSpacing = s.letterSpacing ? `${s.letterSpacing}px` : '0px'
     let tx = x
     if (st.bg) {
       // pill behind the text (inline padding)

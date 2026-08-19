@@ -5,47 +5,115 @@ import { loadChannel } from '../../core/channel'
 import { Section, Slider, Toggle, Row, Segmented, ColorInput, NumberInput, Select, Field, Collapsible, TextInput } from '../controls'
 import { CustomIcons } from './CustomIcons'
 import { BADGE_GROUPS, ALL_BADGE_GROUPS } from '../../core/badges'
-import { EASE_PRESET_LABELS, easeFunction, parseKeyframeData } from '../../core/easing'
+import { EASE_PRESETS, EASE_PRESET_LABELS, easeFunction, parseKeyframeData } from '../../core/easing'
 
 function EaseControl({ cfg, set, patch }: { cfg: Config; set: <K extends keyof Config>(k: K, v: Config[K]) => void; patch: (p: Partial<Config>) => void }) {
   const kf = cfg.easeKeyframes ? parseKeyframeData(cfg.easeKeyframes) : null
   const fn = easeFunction(cfg)
-  // curve preview: y grows upward, x = time
-  const W = 132
-  const H = 46
+  const usingKeyframes = !!cfg.easeKeyframes && !!kf
+  const usingCurve = !usingKeyframes // a preset or a custom curve → draggable handles
+
+  // the two bézier control points behind the current selection, so the handles can be dragged from anywhere
+  const curve: [number, number, number, number] = cfg.easeKeyframes
+    ? [0.22, 1, 0.36, 1]
+    : cfg.easePreset === 'custom'
+      ? cfg.easeCurve
+      : cfg.easePreset === 'smooth'
+        ? [0.22, 1, 0.36, 1]
+        : EASE_PRESETS[cfg.easePreset]
+
+  // editor geometry
+  const W = 190
+  const H = 120
+  const P = 14 // padding so edge handles stay grabbable
+  const iw = W - P * 2
+  const ih = H - P * 2
+  const toX = (x: number) => P + x * iw
+  const toY = (y: number) => H - P - y * ih
+  const svgRef = useRef<SVGSVGElement | null>(null)
+  const [drag, setDrag] = useState<0 | 1 | null>(null)
+
   const pts: string[] = []
-  for (let i = 0; i <= 40; i++) {
-    const x = i / 40
-    const y = fn(x)
-    pts.push(`${(x * W).toFixed(1)},${(H - y * H).toFixed(1)}`)
+  for (let i = 0; i <= 48; i++) {
+    const x = i / 48
+    pts.push(`${toX(x).toFixed(1)},${toY(fn(x)).toFixed(1)}`)
   }
+
+  const moveHandle = (which: 0 | 1, clientX: number, clientY: number) => {
+    const el = svgRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    let x = ((clientX - r.left) * (W / r.width) - P) / iw
+    let y = 1 - ((clientY - r.top) * (H / r.height) - P) / ih
+    x = Math.max(0, Math.min(1, x))
+    y = Math.max(-0.3, Math.min(1.3, y))
+    const next = [...curve] as [number, number, number, number]
+    next[which * 2] = Math.round(x * 100) / 100
+    next[which * 2 + 1] = Math.round(y * 100) / 100
+    patch({ easePreset: 'custom', easeCurve: next, easeKeyframes: '' })
+  }
+
   return (
     <div className="ease">
-      <div className="ease-row">
-        <Field label="Easing" hint="how the entrance accelerates. Custom curve = drag the numbers; or paste AE keyframe data below to copy an exact curve.">
-          <Select
-            label=""
-            value={cfg.easeKeyframes ? ('custom' as typeof cfg.easePreset) : cfg.easePreset}
-            onChange={(v) => patch({ easePreset: v, easeKeyframes: '' })}
-            options={EASE_PRESET_LABELS}
-          />
-        </Field>
-        <svg className="ease-curve" width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-label="easing curve preview">
-          <polyline points={`0,${H} ${W},0`} className="ease-diag" />
-          <polyline points={pts.join(' ')} className="ease-path" />
-        </svg>
+      <Field label="How messages ease in" hint="the speed curve as each message appears. Pick a feel, or drag the dots to shape your own.">
+        <Select label="" value={usingKeyframes ? ('custom' as typeof cfg.easePreset) : cfg.easePreset} onChange={(v) => patch({ easePreset: v, easeKeyframes: '' })} options={EASE_PRESET_LABELS} />
+      </Field>
+      <svg
+        ref={svgRef}
+        className="ease-editor"
+        width={W}
+        height={H}
+        viewBox={`0 0 ${W} ${H}`}
+        aria-label="easing curve — drag the dots to shape it"
+        onPointerMove={(e) => {
+          if (drag === null) return
+          e.preventDefault()
+          moveHandle(drag, e.clientX, e.clientY)
+        }}
+        onPointerUp={() => setDrag(null)}
+        onPointerLeave={() => setDrag(null)}
+      >
+        <line x1={toX(0)} y1={toY(0)} x2={toX(1)} y2={toY(1)} className="ease-diag" />
+        <polyline points={pts.join(' ')} className="ease-path" />
+        {usingCurve && (
+          <>
+            <line x1={toX(0)} y1={toY(0)} x2={toX(curve[0])} y2={toY(curve[1])} className="ease-handle-line" />
+            <line x1={toX(1)} y1={toY(1)} x2={toX(curve[2])} y2={toY(curve[3])} className="ease-handle-line" />
+            {([0, 1] as const).map((h) => (
+              <circle
+                key={h}
+                cx={toX(curve[h * 2])}
+                cy={toY(curve[h * 2 + 1])}
+                r={7}
+                className={'ease-handle' + (drag === h ? ' on' : '')}
+                onPointerDown={(e) => {
+                  e.preventDefault()
+                  ;(e.target as SVGElement).setPointerCapture?.(e.pointerId)
+                  setDrag(h)
+                }}
+              />
+            ))}
+          </>
+        )}
+      </svg>
+      <div className="ease-legend">
+        <span>slow</span>
+        <span>time →</span>
+        <span>fast</span>
       </div>
-      {cfg.easePreset === 'custom' && !cfg.easeKeyframes && (
-        <Row>
-          {(['x1', 'y1', 'x2', 'y2'] as const).map((lbl, i) => (
-            <NumberInput key={lbl} label={lbl} value={cfg.easeCurve[i]} min={i % 2 === 0 ? 0 : -1} max={i % 2 === 0 ? 1 : 2} step={0.01} onChange={(v) => patch({ easeCurve: cfg.easeCurve.map((c, j) => (j === i ? v : c)) as [number, number, number, number] })} />
-          ))}
-        </Row>
-      )}
-      <Collapsible title="Paste After Effects keyframe data" hint={kf ? 'in use' : cfg.easeKeyframes ? "couldn't read a curve" : 'optional'}>
-        <p className="hint">In After Effects, select one animated property's keyframes, copy, and paste here — its shape becomes the entrance easing (time and value are normalised). Clear the box to go back to the preset.</p>
-        <textarea className="ta small" rows={4} spellCheck={false} placeholder={'Adobe After Effects 9.0 Keyframe Data …'} value={cfg.easeKeyframes} onChange={(e) => set('easeKeyframes', e.target.value)} />
-        {cfg.easeKeyframes && !kf && <p className="err">No keyframes found in that text — check you copied the keyframes (not the whole layer).</p>}
+      {usingKeyframes && <p className="hint">Using the curve from your pasted After Effects keyframes. Clear the box below to shape it by hand instead.</p>}
+      <Collapsible title="Copy an easing curve from After Effects" hint={usingKeyframes ? 'in use' : 'optional'}>
+        <ol className="steps">
+          <li>In After Effects, <b>click the keyframes</b> you like on any property so they turn blue (selected).</li>
+          <li>Press <b>⌘C</b> / <b>Ctrl+C</b> (Edit ▸ Copy) — After Effects only copies keyframes that are selected.</li>
+          <li><b>Paste</b> into the box below (⌘V).</li>
+        </ol>
+        <textarea className="ta small" rows={3} spellCheck={false} placeholder={'Paste your After Effects keyframes here…'} value={cfg.easeKeyframes} onChange={(e) => set('easeKeyframes', e.target.value)} aria-label="After Effects keyframe data" />
+        {cfg.easeKeyframes && !kf ? (
+          <p className="err">That doesn’t look like copied keyframes. In After Effects, click the keyframes first (so they’re highlighted), then Edit ▸ Copy and paste again.</p>
+        ) : (
+          cfg.easeKeyframes && <button type="button" className="btn small" onClick={() => set('easeKeyframes', '')}>Clear (use the curve above)</button>
+        )}
       </Collapsible>
     </div>
   )
@@ -117,6 +185,7 @@ export function StylePanel({
         <Field label="Font size (Twitch chat setting)">
           <Segmented value={cfg.fontSize} onChange={(v) => set('fontSize', v)} options={[{ value: 'small', label: 'Small' }, { value: 'default', label: 'Default' }, { value: 'large', label: 'Bigger' }, { value: 'xlarge', label: 'Biggest' }]} />
         </Field>
+        <Slider label="Letter spacing (kerning)" value={cfg.letterSpacing} min={-1} max={4} step={0.1} onChange={(v) => set('letterSpacing', v)} format={(v) => (Math.abs(v) < 0.05 ? 'none' : `${v > 0 ? '+' : ''}${v.toFixed(1)}px`)} hint="space between letters in the names and messages — negative tightens, positive spreads them out" />
       </Section>
 
       <Section title="New message animation">

@@ -227,6 +227,8 @@ export interface Config {
   textOutline: number
   fontSize: FontSizePreset
   fontScale: number
+  /** kerning: extra letter spacing in px (can be negative) */
+  letterSpacing: number
   fontFamily: string
   width: number
   height: number

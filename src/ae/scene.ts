@@ -104,7 +104,7 @@ export interface SceneData {
   background: { color: RGB; opacity: number; radius: number }
   /** px at scale; 0 = off */
   fadeTop: number
-  text: { shadow: boolean; strokeWidth: number }
+  text: { shadow: boolean; strokeWidth: number; tracking: number }
   /** entrance animation defaults for the Controls null (style index = the dropdown order in the host) */
   anim: { style: number; ms: number; slidePx: number }
   /** entrance easing sampled 0..1 (65 points), or null = the host's built-in easeOutCubic */
@@ -658,7 +658,7 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
     chat: { x: geo.chatX, y: geo.chatY, w: geo.chatW, h: geo.chatH, ax, ay },
     background,
     fadeTop: r3(cfg.fadeTopEdge * s),
-    text: { shadow: style.textShadow, strokeWidth: r3(style.textOutline * 2 * s) },
+    text: { shadow: style.textShadow, strokeWidth: r3(style.textOutline * 2 * s), tracking: r3((style.letterSpacing / Math.max(1, style.fontSize)) * 1000) },
     anim: { style: ANIM_STYLE_INDEX[cfg.animation] ?? 2, ms: Math.max(1, cfg.animationMs), slidePx: r3(W * s) },
     ease: easeSamples(cfg)?.map((v) => r3(v)) ?? null,
     clears: clears.filter((c) => c > 0 && c <= durationSec),

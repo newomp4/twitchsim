@@ -523,7 +523,7 @@ $.global.TWITCHSIM = (function () {
     td.applyFill = true;
     td.fillColor = [spec.color[0], spec.color[1], spec.color[2]];
     td.applyStroke = false; // the outline is a Stroke layer style (live-adjustable), see below
-    td.tracking = 0;
+    td.tracking = Math.round(num(st.data.text.tracking, 0)); // AE tracking is integer (1/1000 em)
     try {
       td.fauxBold = false;
       td.fauxItalic = !!font.faux;

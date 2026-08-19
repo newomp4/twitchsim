@@ -17,12 +17,12 @@ export const EASE_PRESETS: Record<Exclude<EasePreset, 'smooth' | 'custom'>, Bezi
 }
 
 export const EASE_PRESET_LABELS: { value: EasePreset; label: string }[] = [
-  { value: 'smooth', label: 'Smooth (default)' },
-  { value: 'ease-out', label: 'Ease out' },
-  { value: 'gentle', label: 'Gentle' },
-  { value: 'linear', label: 'Linear' },
-  { value: 'snappy', label: 'Snappy' },
-  { value: 'custom', label: 'Custom curve' },
+  { value: 'smooth', label: 'Smooth — like Twitch (default)' },
+  { value: 'ease-out', label: 'Ease out — fast, then settles' },
+  { value: 'gentle', label: 'Gentle — soft in and out' },
+  { value: 'linear', label: 'Linear — constant speed' },
+  { value: 'snappy', label: 'Snappy — quick and punchy' },
+  { value: 'custom', label: 'Custom — drag the dots' },
 ]
 
 export function easeOutCubic(x: number): number {

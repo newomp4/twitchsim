@@ -217,3 +217,14 @@ kbd { background: var(--card2); border: 1px solid var(--border2); border-radius:
 textarea.ta.small { min-height: 70px; }
 
 .avatar-thumb { width: 26px; height: 26px; object-fit: cover; border: 1px solid var(--border2); }
+
+.ease-editor { display: block; margin: 6px auto 2px; border: 1px solid var(--border2); border-radius: var(--radius-sm); background: var(--card); touch-action: none; }
+.ease-editor .ease-diag { stroke: var(--border2); stroke-width: 1; stroke-dasharray: 3 3; }
+.ease-editor .ease-path { fill: none; stroke: var(--accent); stroke-width: 2.5; }
+.ease-editor .ease-handle-line { stroke: var(--muted); stroke-width: 1; }
+.ease-editor .ease-handle { fill: var(--bg); stroke: var(--accent); stroke-width: 2; cursor: grab; }
+.ease-editor .ease-handle:hover, .ease-editor .ease-handle.on { fill: var(--accent); cursor: grabbing; }
+.ease-legend { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted2); margin: 0 2px 4px; }
+ol.steps { margin: 2px 0 8px; padding-left: 18px; font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+ol.steps li { margin: 2px 0; }
+ol.steps b { color: var(--text); font-weight: 600; }

@@ -27,6 +27,8 @@ export interface RenderStyle {
   boldNames: boolean
   readableColors: boolean
   nameColorPalette: readonly string[] | null
+  /** kerning (letter spacing) in px */
+  letterSpacing: number
   alternateBg: boolean
   textShadow: boolean
   textOutline: number
@@ -85,6 +87,7 @@ export function styleFromConfig(cfg: Config): RenderStyle {
     boldNames: cfg.boldNames,
     readableColors: cfg.readableColors,
     nameColorPalette: cfg.nameColorMode === 'custom' ? cfg.nameColorPalette : null,
+    letterSpacing: cfg.letterSpacing ?? 0,
     alternateBg: cfg.alternateBg,
     textShadow: cfg.textShadow && (cfg.chatStyle === 'transparent' || cfg.chatStyle === 'custom'),
     textOutline: cfg.chatStyle === 'transparent' || cfg.chatStyle === 'custom' ? cfg.textOutline : 0,
@@ -148,12 +151,21 @@ export function fontMetrics(size: number, family: string): FontMetrics {
   return m
 }
 
+// Letter spacing (kerning) in px, applied to every measured/drawn text run. Set once per layout pass from
+// the style; the measure cache keys on it. Canvas `letterSpacing` is a context property (not the font string).
+let measureLetterSpacing = 0
+export function setLetterSpacing(px: number): void {
+  measureLetterSpacing = Number.isFinite(px) ? px : 0
+}
+
 export function measure(text: string, font: string): number {
-  const key = font + '' + text
+  const key = measureLetterSpacing + '|' + font + '|' + text
   let w = measureCache.get(key)
   if (w === undefined) {
     const c = mctx()
     c.font = font
+    const cc = c as CanvasRenderingContext2D & { letterSpacing?: string }
+    if ('letterSpacing' in cc) cc.letterSpacing = measureLetterSpacing ? `${measureLetterSpacing}px` : '0px'
     w = c.measureText(text).width
     if (measureCache.size > 50000) measureCache.clear()
     measureCache.set(key, w)
@@ -403,6 +415,7 @@ function isSystemKind(kind?: string): boolean {
 
 export function layoutMessage(msg: ChatMessage, env: LayoutEnv, tNow: number, index: number): RowLayout {
   const { style } = env
+  setLetterSpacing(style.letterSpacing)
   const fs = style.fontSize
   const fm = fontMetrics(fs, style.fontFamily)
   const c = style.colors
