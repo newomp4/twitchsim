@@ -113,6 +113,9 @@ const GS = { pard: Buffer.from(GROUP_BLOBS.GS_PARD, 'hex'), tdb4: Buffer.from(GR
 const GE = { pard: Buffer.from(GROUP_BLOBS.GE_PARD, 'hex'), tdb4: Buffer.from(GROUP_BLOBS.GE_TDB4, 'hex') }
 
 // ---------- parameter spec ----------
+// Bump BOTH of these to a new version (e.g. 'TwitchSim Controls 2' / 'Pseudo/TwitchSim Controls 2')
+// whenever PARAMS changes, and bump PSEUDO in cep/host/index.jsx to match — see the note there. Editing
+// PARAMS without a version bump leaves existing AE sessions / projects on the old parameter set.
 const NAME = 'TwitchSim Controls'
 const MATCH = 'Pseudo/TwitchSim Controls'
 const white = [1, 1, 1]
