@@ -6,6 +6,15 @@ import { loadChannel } from '../../core/channel'
 import { Section, Slider, Toggle, Row, Segmented, ColorInput, NumberInput, Select, Field, Collapsible, TextInput } from '../controls'
 import { CustomIcons } from './CustomIcons'
 import { BADGE_GROUPS, ALL_BADGE_GROUPS } from '../../core/badges'
+import { FRAME_PRESETS } from '../../core/defaults'
+
+const FONT_OPTIONS = [
+  { value: 'Inter', label: 'Inter (Twitch)' },
+  { value: 'Roobert', label: 'Roobert (if installed)' },
+  { value: 'Helvetica Neue', label: 'Helvetica Neue' },
+  { value: 'Arial', label: 'Arial' },
+  { value: 'system-ui', label: 'System UI' },
+]
 import { EASE_PRESETS, EASE_PRESET_LABELS, easeFunction, parseKeyframeData } from '../../core/easing'
 
 function EaseControl({ cfg, set, patch }: { cfg: Config; set: <K extends keyof Config>(k: K, v: Config[K]) => void; patch: (p: Partial<Config>) => void }) {
@@ -140,6 +149,15 @@ export function StylePanel({
   const streamerNameRef = useRef(cfg.streamerName)
   streamerNameRef.current = cfg.streamerName
   const pct = (v: number) => `${Math.round(v * 100)}%`
+  // "fill the frame width": how wide the frame/comp is (0 when the output is just the chat itself)
+  const frameW = cfg.framePreset === 'chat' ? 0 : cfg.framePreset === 'custom' ? cfg.frameW : FRAME_PRESETS[cfg.framePreset]?.w ?? 0
+  const chatOutW = cfg.width * (cfg.chatScale ?? 1) * cfg.exportScale // chat column width in output px
+  const fillWidth = () => {
+    if (!frameW) return
+    const target = Math.max(frameW * 0.4, frameW - 2 * cfg.marginX) // leave the current side margin
+    const z = target / (cfg.width * cfg.exportScale)
+    set('chatScale', Math.round(Math.max(0.2, Math.min(20, z)) * 100) / 100)
+  }
   return (
     <>
       <Section title="Theme">
@@ -185,6 +203,17 @@ export function StylePanel({
         <p className="hint">Twitch's own column is 340 px wide. These are Twitch-scale pixels — the export scale multiplies them (340×600 at 3× = a 1020×1800 overlay).</p>
         <Field label="Font size (Twitch chat setting)">
           <Segmented value={cfg.fontSize} onChange={(v) => set('fontSize', v)} options={[{ value: 'small', label: 'Small' }, { value: 'default', label: 'Default' }, { value: 'large', label: 'Bigger' }, { value: 'xlarge', label: 'Biggest' }]} />
+        </Field>
+        <Field label="Chat size — scale the whole chat" hint="Grows the message column, text, badges and spacing together, so the chat gets bigger without changing its look. Use this to match a full-screen layout; the export resolution is separate.">
+          <Slider label="Scale" value={cfg.chatScale} min={0.5} max={8} step={0.05} onChange={(v) => set('chatScale', v)} format={(v) => `${v.toFixed(2)}×`} />
+          {frameW > 0 ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+              <button type="button" className="btn small" onClick={fillWidth}>Fill the frame width</button>
+              <span className="fhint">Chat is {Math.round(chatOutW)}px — {Math.round((chatOutW / frameW) * 100)}% of the {frameW}px frame.</span>
+            </div>
+          ) : (
+            <span className="fhint">Pick a frame / comp size (1080p, 1440p…) — in the Export tab, or “Comp size” in After Effects — to fill a full screen; right now the output is just the chat column.</span>
+          )}
         </Field>
         <Slider label="Letter spacing (kerning)" value={cfg.letterSpacing} min={-1} max={4} step={0.1} onChange={(v) => set('letterSpacing', v)} format={(v) => (Math.abs(v) < 0.05 ? 'none' : `${v > 0 ? '+' : ''}${v.toFixed(1)}px`)} hint="space between letters in the names and messages — negative tightens, positive spreads them out" />
       </Section>
@@ -309,8 +338,13 @@ export function StylePanel({
         </Row>
         <Row>
           <Toggle label="Hype Train active (gold notice bars)" value={cfg.hypeTrain} onChange={(v) => set('hypeTrain', v)} />
-          <Select label="Font family" value={cfg.fontFamily} onChange={(v) => set('fontFamily', v)} options={[{ value: 'Inter', label: 'Inter (Twitch)' }, { value: 'Roobert', label: 'Roobert (if installed)' }, { value: 'Helvetica Neue', label: 'Helvetica Neue' }, { value: 'Arial', label: 'Arial' }, { value: 'system-ui', label: 'System UI' }]} />
         </Row>
+        <Field label="Fonts" hint="The message font is used for everything; the username font overrides just the names. AE builds use the same fonts, so pick ones installed on your machine.">
+          <Row>
+            <Select label="Message font" value={cfg.fontFamily} onChange={(v) => set('fontFamily', v)} options={FONT_OPTIONS} />
+            <Select label="Username font" value={cfg.nameFont} onChange={(v) => set('nameFont', v)} options={[{ value: '', label: 'Same as messages' }, ...FONT_OPTIONS]} />
+          </Row>
+        </Field>
         <Row>
           <Slider label="Side padding" value={cfg.paddingX} min={0} max={60} onChange={(v) => set('paddingX', v)} format={(v) => `${v}px`} />
           <Slider label="Bottom padding" value={cfg.paddingBottom} min={0} max={80} onChange={(v) => set('paddingBottom', v)} format={(v) => `${v}px`} />

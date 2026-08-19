@@ -40,7 +40,9 @@ export interface ExportGeometry {
 
 export function computeGeometry(cfg: Config): ExportGeometry {
   const scale = cfg.exportScale
-  const chatW = Math.round(cfg.width * scale)
+  // chatScale zooms the chat column width (matching styleFromConfig); exportScale is the output resolution
+  const zoom = Math.max(0.05, cfg.chatScale ?? 1)
+  const chatW = Math.round(cfg.width * zoom * scale)
   const chatH = Math.round(cfg.height * scale)
   let outW = chatW
   let outH = chatH
@@ -171,6 +173,7 @@ async function runExportInner(p: ExportParams): Promise<ExportResult> {
   const { config: cfg, timeline: tl, assets, onProgress, signal } = p
   onProgress({ phase: 'preparing', frame: 0, totalFrames: 0, percent: 0, message: 'Loading fonts…' })
   await ensureFonts(cfg.fontFamily, timelineText(tl))
+  if (cfg.nameFont && cfg.nameFont !== cfg.fontFamily) await ensureFonts(cfg.nameFont, timelineText(tl))
   const style = styleFromConfig(cfg)
   const geometry = computeGeometry(cfg)
   // hi-res condition MUST match the per-frame render (`hiRes: geometry.scale * fontScale > 1.25` below) and

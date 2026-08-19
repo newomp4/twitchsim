@@ -115,7 +115,7 @@ export class ChatRenderer {
   private styleKey(o: RenderOptions): string {
     const s = o.style
     const av = s.avatars
-    return [s.width, s.fontSize, s.lineHeight, s.fontFamily, s.theme, s.timestamps, s.showBadges, s.boldNames, s.readableColors, s.nameColorPalette ? s.nameColorPalette.join(',') : '~', s.letterSpacing, s.slideDistance, s.alternateBg, s.padX, s.modView, s.hypeTrain, o.hiRes, s.transparent, s.badgeRadius, Object.keys(s.badgeOverrides).join(','), av.mode, av.shape, Object.keys(av.byLogin).join(','), av.pool.length].join('|')
+    return [s.width, s.fontSize, s.lineHeight, s.fontFamily, s.nameFontFamily, s.theme, s.timestamps, s.showBadges, s.boldNames, s.readableColors, s.nameColorPalette ? s.nameColorPalette.join(',') : '~', s.letterSpacing, s.slideDistance, s.alternateBg, s.padX, s.modView, s.hypeTrain, o.hiRes, s.transparent, s.badgeRadius, Object.keys(s.badgeOverrides).join(','), av.mode, av.shape, Object.keys(av.byLogin).join(','), av.pool.length].join('|')
   }
 
   layoutFor(msg: ChatMessage, o: RenderOptions, tNow: number, index: number): RowLayout {

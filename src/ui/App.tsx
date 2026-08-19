@@ -49,6 +49,12 @@ export default function App() {
     const g = window as unknown as { __twitchsim?: Record<string, unknown> }
     g.__twitchsim = { ...(g.__twitchsim ?? {}), patch, reset, assets, callHost, evalScript, ensureHost }
   }, [patch, reset])
+  // load the chosen message / username fonts (beyond the always-bundled Inter) and redraw once they arrive
+  useEffect(() => {
+    for (const f of [cfg.fontFamily, cfg.nameFont]) {
+      if (f && f !== 'Inter') ensureFonts(f).then(() => setFontsVersion((v) => v + 1))
+    }
+  }, [cfg.fontFamily, cfg.nameFont])
   const firstAnimRef = useRef(true)
   useEffect(() => {
     assets.animated = cfg.animatedEmotes

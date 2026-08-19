@@ -87,6 +87,7 @@ async function buildInAEInner(cfg: Config, timeline: Timeline, assets: AssetCach
   const style = styleFromConfig(cfg)
   onProgress({ phase: 'assets', done: 0, total: 1, message: 'Loading badges & emotes…' })
   await ensureFonts(cfg.fontFamily || 'Inter', timelineText(timeline))
+  if (cfg.nameFont && cfg.nameFont !== cfg.fontFamily) await ensureFonts(cfg.nameFont, timelineText(timeline))
   const urls = collectAssetUrls(timeline, true, style)
   await assets.loadAll(urls, (d, t) => onProgress({ phase: 'assets', done: d, total: t, message: `Loading badges & emotes… ${d}/${t}` }))
   check()

@@ -238,9 +238,15 @@ export interface Config {
   textOutline: number
   fontSize: FontSizePreset
   fontScale: number
+  /** proportional zoom of the whole chat (column width + text + badges + spacing), independent of the
+   * output resolution (exportScale). 1 = normal; raise it to make the chat fill more of the frame width. */
+  chatScale: number
   /** kerning: extra letter spacing in px (can be negative) */
   letterSpacing: number
+  /** the message-body font (and the default for names) */
   fontFamily: string
+  /** the username font; '' = use fontFamily (same as the messages) */
+  nameFont: string
   width: number
   height: number
   paddingX: number

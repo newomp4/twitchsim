@@ -17,6 +17,8 @@ export interface RenderStyle {
   lineHeight: number
   noticeLineHeight: number
   fontFamily: string
+  /** the username font (defaults to fontFamily) */
+  nameFontFamily: string
   theme: Theme
   colors: Palette
   transparent: boolean
@@ -59,8 +61,11 @@ export const FONT_PRESETS: Record<Config['fontSize'], { size: number; line: numb
 
 export function styleFromConfig(cfg: Config): RenderStyle {
   const preset = FONT_PRESETS[cfg.fontSize] ?? FONT_PRESETS.default
-  const fontSize = preset.size * cfg.fontScale
-  const lineHeight = preset.line * cfg.fontScale
+  // proportional zoom of the whole chat: text, badges (via fs/14 in the layout), column width and spacing
+  // all scale together, so the chat can be grown to fill the frame width without changing its look
+  const zoom = Math.max(0.05, cfg.chatScale ?? 1)
+  const fontSize = preset.size * cfg.fontScale * zoom
+  const lineHeight = preset.line * cfg.fontScale * zoom
   const theme: Theme = cfg.chatStyle === 'twitch-light' ? 'light' : cfg.theme
   const colors = TWITCH[theme]
   let bgColor: string | null = colors.chatBg
@@ -75,26 +80,27 @@ export function styleFromConfig(cfg: Config): RenderStyle {
     } else bgColor = hexWithAlpha(cfg.bgColor, cfg.bgOpacity)
   }
   return {
-    width: cfg.width,
+    width: cfg.width * zoom,
     height: cfg.height,
-    padX: cfg.paddingX,
+    padX: cfg.paddingX * zoom,
     padY: 4,
-    paddingBottom: cfg.paddingBottom,
+    paddingBottom: cfg.paddingBottom * zoom,
     fontSize,
     lineHeight,
     noticeLineHeight: 14 * 1.4 * (fontSize / 14),
     fontFamily: cfg.fontFamily || 'Inter',
+    nameFontFamily: cfg.nameFont || cfg.fontFamily || 'Inter',
     theme,
     colors,
     transparent,
     bgColor,
-    cornerRadius: cfg.cornerRadius,
+    cornerRadius: cfg.cornerRadius * zoom,
     timestamps: cfg.timestamps,
     showBadges: cfg.showBadges,
     boldNames: cfg.boldNames,
     readableColors: cfg.readableColors,
     nameColorPalette: cfg.nameColorMode === 'custom' ? cfg.nameColorPalette : null,
-    letterSpacing: cfg.letterSpacing ?? 0,
+    letterSpacing: (cfg.letterSpacing ?? 0) * zoom,
     slideDistance: cfg.slideDistance ?? 1,
     fillDown: !!cfg.fillDown,
     fillHold: cfg.fillHold ?? 1,
@@ -695,10 +701,10 @@ function chatLineAtoms(msg: ChatMessage, env: LayoutEnv, fm: FontMetrics, delete
       group.push({ kind: 'gap', w: 3 * scale })
     }
   }
-  const nameStyle: TextStyle = { font: fontString(style.boldNames ? 700 : 400, fs, style.fontFamily), color, role: 'name' }
+  const nameStyle: TextStyle = { font: fontString(style.boldNames ? 700 : 400, fs, style.nameFontFamily), color, role: 'name' }
   group.push({ kind: 'text', text: user.displayName, w: measure(user.displayName, nameStyle.font), style: nameStyle, above, below })
   if (user.displayName.toLowerCase() !== user.login && !/^[a-z0-9_]+$/i.test(user.displayName)) {
-    const intl: TextStyle = { font: fontString(400, fs, style.fontFamily), color, alpha: 0.6, role: 'name' }
+    const intl: TextStyle = { font: fontString(400, fs, style.nameFontFamily), color, alpha: 0.6, role: 'name' }
     const t = ` (${user.login})`
     group.push({ kind: 'text', text: t, w: measure(t, intl.font), style: intl, above, below })
   }
