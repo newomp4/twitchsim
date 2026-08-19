@@ -178,16 +178,27 @@ $.global.TWITCHSIM = (function () {
     return q(PN[key]) + ', ' + q(NM[key]);
   }
 
-  /** shared expression helpers: easing, growth of a row that arrived `age` seconds ago, marker data lookup */
-  var EXPR_LIB =
-    'function P(x, e) { x = Math.max(0, Math.min(1, x)); var c = 1 - Math.pow(1 - x, 3); return x + (c - x) * e; }\n' +
-    'function BACK(x) { var c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); }\n' +
-    'function GROW(st, age, dur, e) { if (st == 1) return 1; if (age <= 0) return 0; if (age >= dur) return 1; if (st == 4) return Math.min(1, 3 * age / dur); return P(age / dur, e); }\n' +
-    'function TS(L) { try { for (var q = 1; q <= L.marker.numKeys; q++) { var ch = L.marker.key(q).chapter; if (ch.indexOf("ts ") == 0) return ch.split(" "); } } catch (e) {} return null; }\n' +
-    'function CTL(C, n, f, t) { var p; try { p = C.effect(' + q(PSEUDO) + ')(n); } catch (e) { p = C.effect(f)(1); } return t === undefined ? p.value : p.valueAtTime(t); }\n';
+  /** shared expression helpers: easing (custom curve baked from st.data.ease, else easeOutCubic), growth, markers */
+  function exprLib() {
+    var samples = st && st.data && st.data.ease && st.data.ease.length ? st.data.ease : null;
+    var ease;
+    if (samples) {
+      ease = 'function EASE(x) { if (x <= 0) return 0; if (x >= 1) return 1; var S = [' + samples.join(',') + ']; var n = S.length - 1; var p = x * n; var i = Math.floor(p); return S[i] + (S[i + 1] - S[i]) * (p - i); }\n';
+    } else {
+      ease = 'function EASE(x) { return 1 - Math.pow(1 - x, 3); }\n';
+    }
+    return (
+      ease +
+      'function P(x, e) { x = Math.max(0, Math.min(1, x)); var c = EASE(x); var v = x + (c - x) * e; return Math.max(0, Math.min(1, v)); }\n' +
+      'function BACK(x) { var c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); }\n' +
+      'function GROW(st, age, dur, e) { if (st == 1) return 1; if (age <= 0) return 0; if (age >= dur) return 1; if (st == 4) return Math.min(1, 3 * age / dur); return P(age / dur, e); }\n' +
+      'function TS(L) { try { for (var q = 1; q <= L.marker.numKeys; q++) { var ch = L.marker.key(q).chapter; if (ch.indexOf("ts ") == 0) return ch.split(" "); } } catch (e) {} return null; }\n' +
+      'function CTL(C, n, f, t) { var p; try { p = C.effect(' + q(PSEUDO) + ')(n); } catch (e) { p = C.effect(f)(1); } return t === undefined ? p.value : p.valueAtTime(t); }\n'
+    );
+  }
   /** the entrance parameters of the row that arrived at t0 (sampled at its arrival, so keyframed controls apply per row) */
   function exprAnimAt(tExpr) {
-    return 'var st = Math.round(CTL(C, ' + cn('style') + ', ' + tExpr + '));\n' + 'var dur = Math.min(6, Math.max(0.001, CTL(C, ' + cn('dur') + ', ' + tExpr + ') * thisComp.frameDuration));\n' + 'var e = Math.max(0, Math.min(1, CTL(C, ' + cn('ease') + ', ' + tExpr + ') / 100));\n';
+    return 'var st = Math.round(CTL(C, ' + cn('style') + ', ' + tExpr + '));\n' + 'var dur = Math.min(6, Math.max(0.001, CTL(C, ' + cn('dur') + ', ' + tExpr + ') * thisComp.frameDuration));\n' + 'var e = 1; try { e = Math.max(0, Math.min(1, CTL(C, ' + cn('ease') + ', ' + tExpr + ') / 100)); } catch (ee) {}\n';
   }
 
   // ---------------------------------------------------------------- fonts
@@ -787,7 +798,7 @@ $.global.TWITCHSIM = (function () {
   function messageExpressions(ml, msg) {
     // CAP (s): rows older than this are settled whatever the controls say - the live Duration is clamped to it
     var lit = 'var t0 = ' + msg.t0 + ', e0 = ' + msg.epochStart + ', idx = ' + num(msg.idx, 0) + ', CW = ' + st.data.chat.w + ';\n';
-    var head = lit + EXPR_LIB + 'var v = value;\ntry {\n  var C = ' + ctlRef(true) + ';\n  var CAP = 6;\n';
+    var head = lit + exprLib() + 'var v = value;\ntry {\n  var C = ' + ctlRef(true) + ';\n  var CAP = 6;\n';
     var tail = '} catch (err) {}\nv';
     // Y (local, inside Scroll): + row gap, - transient of older rows still growing
     var y =
@@ -854,7 +865,7 @@ $.global.TWITCHSIM = (function () {
     for (var i = 0; i < (clears || []).length; i++) cl.push(String(clears[i]));
     return (
       'var clears = [' + cl.join(', ') + '];\n' +
-      EXPR_LIB +
+      exprLib() +
       'var v = value;\ntry {\n' +
       '  var C = ' + ctlRef(true) + ';\n' +
       '  var gap = CTL(C, ' + cn('gap') + ');\n' +

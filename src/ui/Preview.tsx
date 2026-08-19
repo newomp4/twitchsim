@@ -5,6 +5,7 @@ import { ChatRenderer } from '../core/renderer'
 import type { AssetCache } from '../core/assets'
 import { styleFromConfig } from '../core/layout'
 import { computeGeometry } from '../export/exporter'
+import { easeFunction } from '../core/easing'
 
 export interface PlayerState {
   t: number
@@ -100,6 +101,7 @@ export function Preview({ cfg, timeline, assets, player, zoom, fontsVersion = 0 
   // a new timeline re-uses message ids from 1: drop cached layouts (also when a font arrived late)
   useEffect(() => renderer.invalidate(), [renderer, timeline, fontsVersion])
   const style = useMemo(() => styleFromConfig(cfg), [cfg])
+  const ease = useMemo(() => easeFunction(cfg), [cfg])
   const [fitScale, setFitScale] = useState(1)
   const dpr = Math.min(3, window.devicePixelRatio || 1)
 
@@ -140,12 +142,12 @@ export function Preview({ cfg, timeline, assets, player, zoom, fontsVersion = 0 
       ctx.setTransform(1, 0, 0, 1, 0, 0)
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       ctx.scale(pxScale, pxScale)
-      renderer.render(ctx, timeline, t, { style, animation: cfg.animation, animationMs: cfg.animationMs, fadeTopEdge: cfg.fadeTopEdge, hiRes: pxScale * (cfg.fontScale ?? 1) > 1.25 })
+      renderer.render(ctx, timeline, t, { style, animation: cfg.animation, animationMs: cfg.animationMs, ease, fadeTopEdge: cfg.fadeTopEdge, hiRes: pxScale * (cfg.fontScale ?? 1) > 1.25 })
     }
     const unsub = subscribe(draw)
     draw()
     return unsub
-  }, [cfg, timeline, style, renderer, tRef, subscribe, assets, dpr, zoomScale, fontsVersion])
+  }, [cfg, timeline, style, ease, renderer, tRef, subscribe, assets, dpr, zoomScale, fontsVersion])
 
   const geo = computeGeometry(cfg)
   return (

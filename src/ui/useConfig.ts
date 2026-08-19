@@ -44,6 +44,8 @@ const ENUMS: Partial<Record<keyof Config, readonly string[]>> = {
   exportFormat: ['png-seq', 'webm-alpha', 'mov-prores', 'mp4', 'webm'],
   framePreset: ['chat', '1080p', '1440p', '4k', 'vertical', 'custom'],
   anchor: ['tl', 't', 'tr', 'l', 'c', 'r', 'bl', 'b', 'br'],
+  easePreset: ['smooth', 'ease-out', 'gentle', 'linear', 'snappy', 'custom'],
+  nameColorMode: ['twitch', 'custom'],
 }
 
 export function sanitize(p: Partial<Config> | null | undefined): Partial<Config> {

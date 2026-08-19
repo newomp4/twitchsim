@@ -15,6 +15,8 @@ export interface RenderOptions {
   hiRes: boolean
   /** override background (e.g. opaque export of a transparent style) */
   forceBg?: string | null
+  /** entrance easing curve y(t) (defaults to easeOutCubic) */
+  ease?: (t: number) => number
 }
 
 interface CacheEntry {
@@ -44,10 +46,10 @@ export interface RowAnim {
   scale: number
 }
 
-export function rowAnimation(style: AnimationStyle, age: number, animMs: number, width: number): RowAnim {
+export function rowAnimation(style: AnimationStyle, age: number, animMs: number, width: number, ease: (t: number) => number = easeOutCubic): RowAnim {
   if (style === 'instant' || age >= animMs) return { grow: 1, alpha: 1, dx: 0, scale: 1 }
   const t = Math.max(0, age) / animMs
-  const p = easeOutCubic(t)
+  const p = Math.max(0, Math.min(1, ease(t))) // clamp: the stack model needs grow in [0,1] (overshoot is the 'pop' scale, not the stack)
   switch (style) {
     case 'slide':
     case 'slide-up':
@@ -159,7 +161,7 @@ export class ChatRenderer {
       idx--
       if (m.t < clearT) continue // everything before the latest /clear is gone (the clear notice itself sits at clearT)
       const layout = this.layoutFor(m, o, tMs, idx + 1)
-      const anim = rowAnimation(o.animation, tMs - m.t, animMs, W)
+      const anim = rowAnimation(o.animation, tMs - m.t, animMs, W, o.ease)
       const allotted = layout.height * anim.grow
       const yTop = yBottom - allotted
       toDraw.push({ layout, y: yTop, anim })

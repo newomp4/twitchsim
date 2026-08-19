@@ -5,6 +5,7 @@ import type { AssetCache } from '../core/assets'
 import { styleFromConfig } from '../core/layout'
 import { FRAME_PRESETS } from '../core/defaults'
 import { ensureFonts, timelineText } from '../core/fonts'
+import { easeFunction } from '../core/easing'
 import { exportPngZip } from './pngZip'
 import { exportWithMediabunny } from './mediabunnyExport'
 import { exportProRes } from './ffmpegExport'
@@ -85,6 +86,7 @@ export function makeFrameSource(cfg: Config, tl: Timeline, assets: AssetCache): 
   const renderer = new ChatRenderer(assets)
   const style = styleFromConfig(cfg)
   const transparent = cfg.exportTransparent && formatNeedsAlpha(cfg.exportFormat)
+  const ease = easeFunction(cfg)
   const render = (i: number) => {
     const t = (i / fps) * 1000
     ctx.setTransform(1, 0, 0, 1, 0, 0)
@@ -95,6 +97,7 @@ export function makeFrameSource(cfg: Config, tl: Timeline, assets: AssetCache): 
       style,
       animation: cfg.animation,
       animationMs: cfg.animationMs,
+      ease,
       fadeTopEdge: cfg.fadeTopEdge,
       hiRes: geometry.scale * (cfg.fontScale ?? 1) > 1.25,
       forceBg: style.transparent && !transparent ? null : undefined,

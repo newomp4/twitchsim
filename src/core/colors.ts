@@ -23,9 +23,10 @@ export const DEFAULT_NAME_COLORS = [
  * Twitch picks a default color deterministically from the login:
  * (first char code + last char code) % 15
  */
-export function defaultColorFor(login: string): string {
+export function defaultColorFor(login: string, palette?: readonly string[] | null): string {
+  const pal = palette && palette.length ? palette : DEFAULT_NAME_COLORS
   const n = login.charCodeAt(0) + login.charCodeAt(login.length - 1)
-  return DEFAULT_NAME_COLORS[n % DEFAULT_NAME_COLORS.length]
+  return pal[n % pal.length]
 }
 
 /** Colors people commonly pick when they set a custom color (Prime/Turbo can pick any hex). */

@@ -26,6 +26,7 @@ export interface RenderStyle {
   showBadges: boolean
   boldNames: boolean
   readableColors: boolean
+  nameColorPalette: readonly string[] | null
   alternateBg: boolean
   textShadow: boolean
   textOutline: number
@@ -81,6 +82,7 @@ export function styleFromConfig(cfg: Config): RenderStyle {
     showBadges: cfg.showBadges,
     boldNames: cfg.boldNames,
     readableColors: cfg.readableColors,
+    nameColorPalette: cfg.nameColorMode === 'custom' ? cfg.nameColorPalette : null,
     alternateBg: cfg.alternateBg,
     textShadow: cfg.textShadow && (cfg.chatStyle === 'transparent' || cfg.chatStyle === 'custom'),
     textOutline: cfg.chatStyle === 'transparent' || cfg.chatStyle === 'custom' ? cfg.textOutline : 0,
@@ -357,7 +359,7 @@ export const ICONS = {
 }
 
 function nameColor(login: string, custom: string | null, style: RenderStyle): string {
-  const base = custom || defaultColorFor(login)
+  const base = custom || defaultColorFor(login, style.nameColorPalette)
   return style.readableColors ? readableColor(base, style.theme) : base
 }
 

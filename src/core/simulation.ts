@@ -339,7 +339,9 @@ function buildChatters(ctx: Ctx): void {
 function newChatter(ctx: Ctx, id: number, login: string, displayName: string, persona: string): Chatter {
   const { rng, cfg } = ctx
   let color: string | null = null
-  if (rng.chance(cfg.customColorRatio)) {
+  // custom palette: leave colour null so the palette (hashed from the login) decides every name; the
+  // default (Twitch) mode keeps the usual mix of hashed defaults + a share of self-picked custom colours
+  if (cfg.nameColorMode !== 'custom' && rng.chance(cfg.customColorRatio)) {
     color = rng.chance(0.8) ? rng.pick(POPULAR_CUSTOM_COLORS) : randomHex(rng)
   }
   return {

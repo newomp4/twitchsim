@@ -5,6 +5,51 @@ import { loadChannel } from '../../core/channel'
 import { Section, Slider, Toggle, Row, Segmented, ColorInput, NumberInput, Select, Field, Collapsible, TextInput } from '../controls'
 import { CustomIcons } from './CustomIcons'
 import { BADGE_GROUPS, ALL_BADGE_GROUPS } from '../../core/badges'
+import { EASE_PRESET_LABELS, easeFunction, parseKeyframeData } from '../../core/easing'
+
+function EaseControl({ cfg, set, patch }: { cfg: Config; set: <K extends keyof Config>(k: K, v: Config[K]) => void; patch: (p: Partial<Config>) => void }) {
+  const kf = cfg.easeKeyframes ? parseKeyframeData(cfg.easeKeyframes) : null
+  const fn = easeFunction(cfg)
+  // curve preview: y grows upward, x = time
+  const W = 132
+  const H = 46
+  const pts: string[] = []
+  for (let i = 0; i <= 40; i++) {
+    const x = i / 40
+    const y = fn(x)
+    pts.push(`${(x * W).toFixed(1)},${(H - y * H).toFixed(1)}`)
+  }
+  return (
+    <div className="ease">
+      <div className="ease-row">
+        <Field label="Easing" hint="how the entrance accelerates. Custom curve = drag the numbers; or paste AE keyframe data below to copy an exact curve.">
+          <Select
+            label=""
+            value={cfg.easeKeyframes ? ('custom' as typeof cfg.easePreset) : cfg.easePreset}
+            onChange={(v) => patch(v === cfg.easePreset ? {} : { easePreset: v, easeKeyframes: '' })}
+            options={EASE_PRESET_LABELS}
+          />
+        </Field>
+        <svg className="ease-curve" width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-label="easing curve preview">
+          <polyline points={`0,${H} ${W},0`} className="ease-diag" />
+          <polyline points={pts.join(' ')} className="ease-path" />
+        </svg>
+      </div>
+      {cfg.easePreset === 'custom' && !cfg.easeKeyframes && (
+        <Row>
+          {(['x1', 'y1', 'x2', 'y2'] as const).map((lbl, i) => (
+            <NumberInput key={lbl} label={lbl} value={cfg.easeCurve[i]} min={i % 2 === 0 ? 0 : -1} max={i % 2 === 0 ? 1 : 2} step={0.01} onChange={(v) => patch({ easeCurve: cfg.easeCurve.map((c, j) => (j === i ? v : c)) as [number, number, number, number] })} />
+          ))}
+        </Row>
+      )}
+      <Collapsible title="Paste After Effects keyframe data" hint={kf ? 'in use' : cfg.easeKeyframes ? "couldn't read a curve" : 'optional'}>
+        <p className="hint">In After Effects, select one animated property's keyframes, copy, and paste here — its shape becomes the entrance easing (time and value are normalised). Clear the box to go back to the preset.</p>
+        <textarea className="ta small" rows={4} spellCheck={false} placeholder={'Adobe After Effects 9.0 Keyframe Data …'} value={cfg.easeKeyframes} onChange={(e) => set('easeKeyframes', e.target.value)} />
+        {cfg.easeKeyframes && !kf && <p className="err">No keyframes found in that text — check you copied the keyframes (not the whole layer).</p>}
+      </Collapsible>
+    </div>
+  )
+}
 
 export function StylePanel({
   cfg,
@@ -92,6 +137,7 @@ export function StylePanel({
           />
           {cfg.animation !== 'instant' && <Slider label="Duration" value={cfg.animationMs} min={60} max={800} step={10} onChange={(v) => set('animationMs', v)} format={(v) => `${v}ms`} />}
         </Row>
+        {cfg.animation !== 'instant' && <EaseControl cfg={cfg} set={set} patch={patch} />}
       </Section>
 
       <Section title="Badges & emotes">
@@ -148,6 +194,26 @@ export function StylePanel({
           <Toggle label="Readable colors (Twitch default on)" value={cfg.readableColors} onChange={(v) => set('readableColors', v)} />
           <Toggle label="Bold usernames" value={cfg.boldNames} onChange={(v) => set('boldNames', v)} />
         </Row>
+        <Field label="Username colours" hint="Twitch = the 15 default colours hashed from each login; Custom = your own palette (same hashing, so a given name is always the same colour). Give a user an exact colour with [color:#hex] in a line.">
+          <Segmented value={cfg.nameColorMode} onChange={(v) => set('nameColorMode', v)} options={[{ value: 'twitch', label: 'Twitch default' }, { value: 'custom', label: 'Custom palette' }]} />
+        </Field>
+        {cfg.nameColorMode === 'custom' && (
+          <div className="palette">
+            {cfg.nameColorPalette.map((col, i) => (
+              <span className="swatch" key={i}>
+                <input type="color" aria-label={`Colour ${i + 1}`} value={/^#[0-9a-f]{6}$/i.test(col) ? col : '#000000'} onChange={(e) => patch({ nameColorPalette: cfg.nameColorPalette.map((c, j) => (j === i ? e.target.value : c)) })} />
+                <button type="button" className="x" title="Remove this colour" aria-label={`Remove colour ${i + 1}`} onClick={() => patch({ nameColorPalette: cfg.nameColorPalette.filter((_, j) => j !== i) })}>
+                  ×
+                </button>
+              </span>
+            ))}
+            <button type="button" className="btn small" onClick={() => patch({ nameColorPalette: [...cfg.nameColorPalette, '#9146ff'] })}>
+              + colour
+            </button>
+            {cfg.nameColorPalette.length === 0 && <span className="fhint">Add at least one colour.</span>}
+          </div>
+        )}
+        <Slider label="Share who pick a custom colour (Twitch mode)" value={cfg.customColorRatio} min={0} max={1} step={0.02} onChange={(v) => set('customColorRatio', v)} format={pct} hint="in Twitch mode, how many chatters set their own colour (Prime/Turbo) instead of a default" />
         <Row>
           <Toggle label="Alternating row background" value={cfg.alternateBg} onChange={(v) => set('alternateBg', v)} />
           <Toggle label="Broadcaster / mod view (First Time Chat, Raider tags)" value={cfg.modView} onChange={(v) => set('modView', v)} />

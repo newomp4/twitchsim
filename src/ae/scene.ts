@@ -23,6 +23,7 @@ import { frameAt } from '../core/assets'
 import { styleFromConfig, layoutMessage, fontMetrics, measure, type RowLayout, type Atom, type TextStyle, type LineBox, type RenderStyle } from '../core/layout'
 import { computeGeometry } from '../export/exporter'
 import { drawEffect } from '../core/renderer'
+import { easeSamples } from '../core/easing'
 
 // ---------------------------------------------------------------------------
 // Output types (kept JSON-friendly and ES3-friendly for the host script)
@@ -106,6 +107,8 @@ export interface SceneData {
   text: { shadow: boolean; strokeWidth: number }
   /** entrance animation defaults for the Controls null (style index = the dropdown order in the host) */
   anim: { style: number; ms: number; slidePx: number }
+  /** entrance easing sampled 0..1 (65 points), or null = the host's built-in easeOutCubic */
+  ease: number[] | null
   /** /clear times (comp seconds) — the Scroll expression counts rows per epoch */
   clears: number[]
   /** hold keys: the stack's instant push-ups (arrivals, deletions, clears); the growth transient is an expression */
@@ -657,6 +660,7 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
     fadeTop: r3(cfg.fadeTopEdge * s),
     text: { shadow: style.textShadow, strokeWidth: r3(style.textOutline * 2 * s) },
     anim: { style: ANIM_STYLE_INDEX[cfg.animation] ?? 2, ms: Math.max(1, cfg.animationMs), slidePx: r3(W * s) },
+    ease: easeSamples(cfg)?.map((v) => r3(v)) ?? null,
     clears: clears.filter((c) => c > 0 && c <= durationSec),
     scroll,
     assets: writer.assets,

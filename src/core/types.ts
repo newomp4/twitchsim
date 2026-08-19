@@ -129,6 +129,8 @@ export interface ChatMessage {
   }
 }
 
+import type { EasePreset } from './easing'
+
 export type AnimationStyle = 'instant' | 'slide-up' | 'slide-left' | 'slide-right' | 'fade' | 'pop' | 'slide-fade' | 'slide'
 export type ChatStyle = 'twitch-dark' | 'twitch-light' | 'transparent' | 'custom'
 export type FontSizePreset = 'small' | 'default' | 'large' | 'xlarge'
@@ -229,10 +231,18 @@ export interface Config {
   timestamps: boolean
   alternateBg: boolean
   readableColors: boolean
+  /** how names get their colour: twitch = the 15 default hashed colours; custom = your palette (hashed the same way) */
+  nameColorMode: 'twitch' | 'custom'
+  /** the palette used when nameColorMode = custom (hex colours) */
+  nameColorPalette: string[]
   showBadges: boolean
   boldNames: boolean
   animation: AnimationStyle
   animationMs: number
+  /** entrance easing: a preset, a custom cubic-bézier (easeCurve), or a pasted AE keyframe curve (easeKeyframes) */
+  easePreset: EasePreset
+  easeCurve: [number, number, number, number]
+  easeKeyframes: string
   fadeTopEdge: number
   modView: boolean
   hypeTrain: boolean

@@ -200,3 +200,18 @@ kbd { background: var(--card2); border: 1px solid var(--border2); border-radius:
 .chip.on { background: var(--card2); border-color: var(--muted); color: var(--text); }
 .chip.ghost { border-style: dashed; }
 .chip:hover { border-color: var(--muted); color: var(--text); }
+
+.palette { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 8px; }
+.palette .swatch { position: relative; display: inline-flex; }
+.palette .swatch input[type=color] { width: 30px; height: 28px; padding: 0; border: 1px solid var(--border2); background: var(--card); border-radius: var(--radius-sm); cursor: pointer; }
+.palette .swatch .x { position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; line-height: 14px; padding: 0; border-radius: 999px; border: 1px solid var(--border2); background: var(--bg); color: var(--muted2); font-size: 12px; cursor: pointer; display: none; }
+.palette .swatch:hover .x { display: block; }
+.palette .swatch .x:hover { color: var(--text); border-color: var(--muted); }
+
+.ease { margin: 2px 0 4px; }
+.ease-row { display: flex; gap: 12px; align-items: flex-end; }
+.ease-row .field { flex: 1; }
+.ease-curve { flex: none; border: 1px solid var(--border2); border-radius: var(--radius-sm); background: var(--card); }
+.ease-curve .ease-diag { fill: none; stroke: var(--border2); stroke-width: 1; stroke-dasharray: 3 3; }
+.ease-curve .ease-path { fill: none; stroke: var(--accent); stroke-width: 2; }
+textarea.ta.small { min-height: 70px; }
