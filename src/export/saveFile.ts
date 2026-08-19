@@ -62,8 +62,10 @@ export function guardedWritable(writable: FileSystemWritableFileStream): { strea
     stream,
     commit: async () => {
       if (done) return
-      done = true
+      // mark done only after close() resolves: if the final flush fails (e.g. disk full at the last byte),
+      // done stays false so the caller's discard() can still clean up the half-written swap file
       await writable.close()
+      done = true
     },
     discard: async () => {
       if (done) return

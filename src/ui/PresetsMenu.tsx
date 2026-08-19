@@ -89,7 +89,9 @@ export function PresetsMenu({ cfg, apply }: { cfg: Config; apply: (c: Config) =>
   }
 
   const load = (p: SavedPreset) => {
-    apply({ ...DEFAULT_CONFIG, ...sanitize(p.config) } as Config)
+    // named presets are stored WITHOUT the image blobs (they stay loaded across presets, per the UI's promise),
+    // so keep the current uploads instead of letting the DEFAULT_CONFIG empty arrays wipe them (and IndexedDB)
+    apply({ ...DEFAULT_CONFIG, ...sanitize(p.config), customBadges: cfg.customBadges, customEmotes: cfg.customEmotes, customAvatars: cfg.customAvatars } as Config)
     setOpen(false)
   }
 
@@ -132,8 +134,9 @@ export function PresetsMenu({ cfg, apply }: { cfg: Config; apply: (c: Config) =>
       const f = input.files?.[0]
       if (!f) return
       try {
-        const j = JSON.parse(await f.text()) as Partial<Config>
-        apply({ ...DEFAULT_CONFIG, ...sanitize(j) } as Config)
+        const s = sanitize(JSON.parse(await f.text()) as Partial<Config>)
+        // a full backup carries its own images; a file without them keeps the current uploads rather than wiping
+        apply({ ...DEFAULT_CONFIG, ...s, customBadges: s.customBadges ?? cfg.customBadges, customEmotes: s.customEmotes ?? cfg.customEmotes, customAvatars: s.customAvatars ?? cfg.customAvatars } as Config)
       } catch {
         alert("That file isn't a valid TwitchSim preset.")
       }

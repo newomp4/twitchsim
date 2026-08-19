@@ -142,7 +142,8 @@ interface EaseConfig {
 export function easeFromPreset(preset: EasePreset, curve?: Bezier): (t: number) => number {
   if (preset === 'smooth') return easeOutCubic
   const c = preset === 'custom' ? (curve ?? [0.22, 1, 0.36, 1]) : EASE_PRESETS[preset]
-  if (!Array.isArray(c) || c.length < 4) return easeOutCubic
+  // an unknown preset or a malformed / non-finite curve (e.g. a corrupt saved config) falls back to the default
+  if (!Array.isArray(c) || c.length < 4 || c.some((v) => !Number.isFinite(v))) return easeOutCubic
   return cubicBezier(c[0], c[1], c[2], c[3])
 }
 
@@ -176,6 +177,8 @@ export function easeSamples(cfg: EaseConfig): number[] | null {
   const f = easeFunction(cfg)
   const N = 65
   const out: number[] = new Array(N)
-  for (let i = 0; i < N; i++) out[i] = f(i / (N - 1))
+  // clamp to [0,1] so the AE-baked room-making matches the web (which clamps grow); a hand-dragged
+  // custom curve that overshoots would otherwise over/under-shoot the stack slot only in AE
+  for (let i = 0; i < N; i++) out[i] = Math.max(0, Math.min(1, f(i / (N - 1))))
   return out
 }

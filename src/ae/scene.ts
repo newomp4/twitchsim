@@ -17,6 +17,7 @@
  *     └ Background (shape; opacity 0 when the look is transparent)
  */
 import type { Config } from '../core/types'
+import { scrollCanLead } from '../core/types'
 import type { Timeline } from '../core/simulation'
 import type { AssetCache } from '../core/assets'
 import { frameAt } from '../core/assets'
@@ -535,7 +536,13 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
     C[i] = sum
     idxInEpoch[i] = n
   }
-  const visibleAt = (k: number, tau: number) => t[k] <= tau && tau < hiddenAt[k]
+  // Decoupled scroll ("open the gap early"): the stack starts making room for a row `stackLead` seconds
+  // before it arrives. The baked hold key and the expression transient must both move earlier by the SAME
+  // amount, or the transient stops cancelling the baked jump and the whole stack lurches at each arrival.
+  const scrollLeadSec = Math.max(0, cfg.scrollLead ?? 0) / 1000
+  const scrollDecoupled = scrollCanLead(cfg.animation) && (scrollLeadSec > 0 || (cfg.scrollDurationMs ?? 0) > 0 || (cfg.scrollEasePreset != null && cfg.scrollEasePreset !== 'match'))
+  const stackLead = scrollDecoupled ? scrollLeadSec : 0
+  const visibleAt = (k: number, tau: number) => t[k] - stackLead <= tau && tau < hiddenAt[k]
   /** settled stack height (every row at its full height — the entrance growth is an expression in AE) */
   const S = (tau: number) => {
     let sum = 0
@@ -545,7 +552,8 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
 
   // ---- scroll keys (hold: the stack jumps at every event, the expression smooths the arrivals) ----
   const times = new Set<number>([0])
-  for (let k = 0; k < N; k++) if (t[k] >= 0 && t[k] <= durationSec) times.add(rt(t[k]))
+  // arrivals bake their step `stackLead` early so it lines up with the (lead-shifted) expression transient
+  for (let k = 0; k < N; k++) if (t[k] >= 0 && t[k] <= durationSec) times.add(rt(Math.max(0, t[k] - stackLead)))
   for (const c of [...clears, ...del.filter((d) => d !== Infinity)]) if (c > 0 && c <= durationSec) times.add(rt(c))
   const keyTimes = [...times].sort((a, b) => a - b)
   const scroll: Key[] = keyTimes.map((tau) => ({ t: rt(tau), v: r3((H - pb - S(tau)) * s), interp: 'hold' as const }))
@@ -667,12 +675,10 @@ export function compileScene(cfg: Config, tl: Timeline, assets: AssetCache, opts
     fill: cfg.fillDown ? { liftPx: r3(Math.max(0, H / 2 - pb - style.lineHeight / 2) * s), hold: r3(cfg.fillHold ?? 1), drift: r3(cfg.fillDrift ?? 1.5) } : null,
     ease: easeSamples(cfg)?.map((v) => r3(v)) ?? null,
     scrollAnim: (() => {
-      const lead = Math.max(0, cfg.scrollLead ?? 0) / 1000
-      const decoupled = lead > 0 || (cfg.scrollDurationMs ?? 0) > 0 || (cfg.scrollEasePreset && cfg.scrollEasePreset !== 'match')
-      if (!decoupled) return null
+      if (!scrollDecoupled) return null
       const dur = ((cfg.scrollDurationMs ?? 0) > 0 ? cfg.scrollDurationMs : Math.max(1, cfg.animationMs)) / 1000
-      const scEase = cfg.scrollEasePreset && cfg.scrollEasePreset !== 'match' ? samplesFromFn(easeFromPreset(cfg.scrollEasePreset, cfg.easeCurve)) : (easeSamples(cfg) ?? null)
-      return { lead: r3(lead), dur: r3(dur), ease: scEase ? scEase.map((v) => r3(v)) : null }
+      const scEase = cfg.scrollEasePreset != null && cfg.scrollEasePreset !== 'match' ? samplesFromFn(easeFromPreset(cfg.scrollEasePreset, cfg.easeCurve)) : (easeSamples(cfg) ?? null)
+      return { lead: r3(scrollLeadSec), dur: r3(dur), ease: scEase ? scEase.map((v) => r3(v)) : null }
     })(),
     clears: clears.filter((c) => c > 0 && c <= durationSec),
     scroll,

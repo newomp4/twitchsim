@@ -25,7 +25,7 @@ export function ExportPanel({ cfg, set, patch, timeline, assets }: { cfg: Config
   // the length only follows the lines when there are ordered lines
   const autoLen = cfg.durationAuto && (cfg.mode === 'script' || cfg.mode === 'mixed') && !!cfg.script.trim()
   const fmt = FORMATS.find((f) => f.value === cfg.exportFormat) ?? FORMATS[0]
-  const frames = Math.round((timeline.durationMs / 1000) * cfg.exportFps)
+  const frames = Math.max(1, Math.round((timeline.durationMs / 1000) * cfg.exportFps)) // matches makeFrameSource's floor
   const running = !!progress && progress.phase !== 'done' && progress.phase !== 'error' && progress.phase !== 'cancelled'
   const megapixels = (geo.outW * geo.outH) / 1e6
 

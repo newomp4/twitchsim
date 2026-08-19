@@ -132,6 +132,13 @@ export interface ChatMessage {
 import type { EasePreset } from './easing'
 
 export type AnimationStyle = 'instant' | 'slide-up' | 'slide-left' | 'slide-right' | 'fade' | 'pop' | 'slide-fade' | 'slide'
+
+/** Styles whose visible entrance is independent of the vertical stack, so the scroll may lead them.
+ * Pure slides (slide-up/slide) and instant have no separate entrance — the row's motion IS the room —
+ * so leading them would open a blank gap and then pop the finished row in; those stay coupled. */
+export function scrollCanLead(style: AnimationStyle): boolean {
+  return style === 'slide-left' || style === 'slide-right' || style === 'fade' || style === 'slide-fade' || style === 'pop'
+}
 export type ChatStyle = 'twitch-dark' | 'twitch-light' | 'transparent' | 'custom'
 export type FontSizePreset = 'small' | 'default' | 'large' | 'xlarge'
 export type ContentMode = 'script' | 'ambient' | 'mixed' | 'hype'

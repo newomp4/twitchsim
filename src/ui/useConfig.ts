@@ -49,6 +49,11 @@ const ENUMS: Partial<Record<keyof Config, readonly string[]>> = {
   nameColorMode: ['twitch', 'custom'],
   avatarMode: ['off', 'assigned', 'all'],
   avatarShape: ['circle', 'rounded', 'square'],
+  // enum-like unions that sanitize() would otherwise pass through on `typeof === 'string'` alone
+  channelSubBadgeStyle: ['default', 'generated', 'channel', 'custom'],
+  theme: ['dark', 'light'],
+  badgeFit: ['cover', 'contain'],
+  language: ['en'],
 }
 
 export function sanitize(p: Partial<Config> | null | undefined): Partial<Config> {

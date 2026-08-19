@@ -21,6 +21,8 @@ const MOODS: { value: Mood; label: string }[] = [
 
 export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Config>(k: K, v: Config[K]) => void }) {
   const fileRef = useRef<HTMLInputElement>(null)
+  // remembers a custom pre-fill length so the "start full" toggle restores it instead of jumping back to 20s
+  const lastPrefill = useRef(cfg.prefillSec > 0 ? cfg.prefillSec : 20)
   const [copied, setCopied] = useState(false)
   const usesFiller = cfg.mode !== 'script'
   // "Filler only" + "re-use my lines" still needs the lines box
@@ -166,7 +168,7 @@ export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Con
             <Slider label="Speed-up per message" value={cfg.rampRatio} min={0.7} max={0.98} step={0.005} onChange={(v) => set('rampRatio', v)} format={(v) => `${Math.round(v * 100)}% of the last gap`} hint="lower = ramps up faster" />
           </>
         )}
-        <Toggle label="Start with the chat already full" value={cfg.prefillSec > 0} onChange={(v) => set('prefillSec', v ? 20 : 0)} />
+        <Toggle label="Start with the chat already full" value={cfg.prefillSec > 0} onChange={(v) => { if (!v && cfg.prefillSec > 0) lastPrefill.current = cfg.prefillSec; set('prefillSec', v ? lastPrefill.current || 20 : 0) }} />
         {orderedLines && hasLines && <Toggle label="End right after my last line (loop-friendly)" value={cfg.durationAuto} onChange={(v) => set('durationAuto', v)} />}
         {!(cfg.durationAuto && orderedLines && hasLines) ? (
           <Slider label="Length" value={cfg.durationSec} min={1} max={600} onChange={(v) => set('durationSec', v)} format={(v) => `${v}s`} />
@@ -199,8 +201,8 @@ export function ChatPanel({ cfg, set }: { cfg: Config; set: <K extends keyof Con
           <Toggle label="Chat bots (Nightbot / StreamElements)" value={cfg.botsEnabled} onChange={(v) => set('botsEnabled', v)} />
           <Toggle label='"Welcome to the chat room!" line' value={cfg.welcomeMessage} onChange={(v) => set('welcomeMessage', v)} />
         </Row>
+        {/* "Users with a custom name color" (customColorRatio) lives on the Look tab with the other name-colour settings */}
         <Row>
-          <Slider label="Users with a custom name color" value={cfg.customColorRatio} min={0} max={1} step={0.01} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set('customColorRatio', v)} />
           <Slider label="Localized names (김민수 (minsu_kim))" value={cfg.localizedNamesRatio} min={0} max={0.3} step={0.01} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set('localizedNamesRatio', v)} />
         </Row>
         {cfg.pacing === 'natural' && (

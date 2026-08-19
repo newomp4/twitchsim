@@ -173,7 +173,10 @@ async function runExportInner(p: ExportParams): Promise<ExportResult> {
   await ensureFonts(cfg.fontFamily, timelineText(tl))
   const style = styleFromConfig(cfg)
   const geometry = computeGeometry(cfg)
-  const urls = collectAssetUrls(tl, geometry.scale > 1.25, style)
+  // hi-res condition MUST match the per-frame render (`hiRes: geometry.scale * fontScale > 1.25` below) and
+  // the preview — otherwise the preload fetches 1x art while the renderer asks for 4x, so early frames draw
+  // the blurry fallback and sharper art pops in mid-file (non-deterministic). e.g. scale 1 + fontScale 1.5.
+  const urls = collectAssetUrls(tl, geometry.scale * (cfg.fontScale ?? 1) > 1.25, style)
   onProgress({ phase: 'loading-assets', frame: 0, totalFrames: 0, percent: 0, message: `Loading ${urls.length} images…` })
   await assets.loadAll(urls, (done, total) => {
     if (signal.aborted) throw new DOMException('cancelled', 'AbortError') // Cancel works while images load, too

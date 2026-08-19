@@ -1,4 +1,5 @@
 import type { AnimationStyle, ChatMessage } from './types'
+import { scrollCanLead } from './types'
 import type { Timeline } from './simulation'
 import { AssetCache, frameAt } from './assets'
 import { layoutMessage, type Atom, type RenderStyle, type RowLayout, type LineBox, type Block, type TextStyle, avatarFor } from './layout'
@@ -49,9 +50,9 @@ export interface RowAnim {
 }
 
 /** "start centered → drift down to fill": 1 while centred (hold), easing to 0 (bottom-anchored) over drift. */
-/** Room-making (stack) growth on the scroll's own clock — used when the scroll is decoupled from the entrance. */
-export function rowStackGrow(style: AnimationStyle, age: number, dur: number, ease?: (t: number) => number): number {
-  if (style === 'instant') return age > 0 ? 1 : 0
+/** Room-making (stack) growth on the scroll's own clock — used when the scroll is decoupled from the entrance.
+ * Style-blind, matching the AE host's GROWS(): the room always eases over its own duration. */
+export function rowStackGrow(age: number, dur: number, ease?: (t: number) => number): number {
   if (age <= 0) return 0
   if (age >= dur) return 1
   return (ease ?? easeOutCubic)(age / dur)
@@ -168,7 +169,10 @@ export class ChatRenderer {
 
     // visible window
     const msgs = tl.messages
-    const lead = Math.max(0, s.scrollLead ?? 0)
+    // the scroll may only lead styles whose entrance is independent of the stack (see scrollCanLead);
+    // for pure-slide / instant it stays coupled so it never opens a blank gap and pops the row in
+    const canLead = scrollCanLead(o.animation)
+    const lead = canLead ? Math.max(0, s.scrollLead ?? 0) : 0
     // the list opens room `lead` ms before a message slides in: include soon-to-arrive rows (drawn invisibly)
     let hi = upperBound(msgs, tMs + lead + 1e-6)
     let clearT = -Infinity
@@ -197,7 +201,8 @@ export class ChatRenderer {
       // Decoupled from the message's horizontal entrance so the room can lead the slide-in.
       const scrollDur = (s.scrollDurationMs ?? 0) > 0 ? s.scrollDurationMs : animMs
       const scrollEase = o.scrollEase ?? o.ease ?? undefined
-      const stackGrow = lead > 0 || (s.scrollDurationMs ?? 0) > 0 || o.scrollEase ? Math.max(0, Math.min(1, rowStackGrow(o.animation, tMs - m.t + lead, scrollDur, scrollEase))) : anim.grow
+      const decoupled = canLead && (lead > 0 || (s.scrollDurationMs ?? 0) > 0 || !!o.scrollEase)
+      const stackGrow = decoupled ? Math.max(0, Math.min(1, rowStackGrow(tMs - m.t + lead, scrollDur, scrollEase))) : anim.grow
       const allotted = layout.height * stackGrow
       const yTop = yBottom - allotted
       toDraw.push({ layout, y: yTop, anim })

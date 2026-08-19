@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import type { Config } from '../../core/types'
+import { scrollCanLead } from '../../core/types'
 import type { ChannelData } from '../../core/channel'
 import { loadChannel } from '../../core/channel'
 import { Section, Slider, Toggle, Row, Segmented, ColorInput, NumberInput, Select, Field, Collapsible, TextInput } from '../controls'
@@ -210,12 +211,12 @@ export function StylePanel({
           <Slider label="Slide distance" value={cfg.slideDistance} min={0.1} max={1} step={0.01} onChange={(v) => set('slideDistance', v)} format={(v) => `${Math.round(v * 100)}% of width`} hint="how far it flies in from — 33% ≈ a subtle slide from near the middle" />
         )}
         {cfg.animation !== 'instant' && <EaseControl cfg={cfg} set={set} patch={patch} />}
-        {cfg.animation !== 'instant' && (
-          <Collapsible title="List scrolls ahead of the message" hint={(cfg.scrollLead ?? 0) > 0 || cfg.scrollEasePreset !== 'match' || (cfg.scrollDurationMs ?? 0) > 0 ? 'on' : 'off'}>
-            <p className="hint">The list can open the gap for a new message slightly <em>before</em> it slides in — the scroll leads the entrance, so the row lands into space that's already waiting. Give the scroll its own easing and speed here.</p>
-            <Slider label="List leads the message by" value={cfg.scrollLead} min={0} max={300} step={5} onChange={(v) => set('scrollLead', v)} format={(v) => (v === 0 ? 'off — moves together' : `${v}ms ahead`)} hint="0.150s (150ms) matches the hand-animated intro" />
+        {scrollCanLead(cfg.animation) && (
+          <Collapsible title="Give the scroll its own timing" hint={(cfg.scrollLead ?? 0) > 0 || cfg.scrollEasePreset !== 'match' || (cfg.scrollDurationMs ?? 0) > 0 ? 'on' : 'off'}>
+            <p className="hint">The list can open the gap for a new message slightly <em>before</em> it slides in — the scroll leads the entrance, so the row lands into space that's already waiting. Give the scroll its own speed and easing here.</p>
+            <Slider label="List leads the message by" value={cfg.scrollLead} min={0} max={300} step={5} onChange={(v) => set('scrollLead', v)} format={(v) => (v === 0 ? 'off — moves together' : `${v}ms ahead`)} hint="how far ahead the list opens the gap before the message arrives" />
             <Slider label="Scroll duration" value={cfg.scrollDurationMs} min={0} max={800} step={10} onChange={(v) => set('scrollDurationMs', v)} format={(v) => (v === 0 ? 'match the entrance' : `${v}ms`)} hint="how long the list takes to shift up one row" />
-            <Select label="Scroll easing" value={cfg.scrollEasePreset} onChange={(v) => set('scrollEasePreset', v as Config['scrollEasePreset'])} options={[{ value: 'match', label: 'Match the entrance easing' }, ...EASE_PRESET_LABELS]} />
+            <Select label="Scroll easing" value={cfg.scrollEasePreset} onChange={(v) => set('scrollEasePreset', v as Config['scrollEasePreset'])} options={[{ value: 'match', label: 'Match the entrance easing' }, ...EASE_PRESET_LABELS.filter((o) => o.value !== 'custom')]} />
           </Collapsible>
         )}
         <Toggle label="Fill down (start centered → drop to fill the screen)" value={cfg.fillDown} onChange={(v) => set('fillDown', v)} hint="cinematic: the newest message sits on the centre line, then the column drifts down to fill top-to-bottom" />
