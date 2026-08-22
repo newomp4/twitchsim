@@ -26,3 +26,6 @@ dist-ssr
 
 # built After Effects panel (npm run build:cep)
 cep/client/
+
+# packaged panel zip (npm run package)
+release/

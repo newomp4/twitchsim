@@ -1,0 +1,95 @@
+TwitchSim - After Effects panel
+===============================
+
+Builds a realistic fake Twitch chat inside After Effects as real, editable
+layers - one precomp per message, all driven by a single "TwitchSim Controls"
+null you can move, restyle and keyframe.
+
+
+WHAT YOU NEED
+-------------
+After Effects 2025 or newer, on macOS or Windows.
+
+This matters: the panel needs Adobe's CEP 12, which arrived in After Effects
+25.0. On After Effects 2024 or older it will NOT show up in the Extensions
+menu at all - the install will look like it worked and the panel just won't
+be there. Help > About After Effects tells you the version.
+
+
+INSTALL - MAC
+-------------
+1. Unzip this folder somewhere (Desktop is fine).
+2. RIGHT-CLICK "Install on Mac.command" and choose Open, then Open again.
+   Right-click matters the first time - a normal double-click gets blocked
+   because the file came from the internet.
+   If macOS still refuses: open Terminal, drag "Install on Mac.command" into
+   the window, and press Return. That always works.
+3. Quit After Effects and start it again.
+4. Window > Extensions > TwitchSim
+
+
+INSTALL - WINDOWS
+-----------------
+1. Unzip this folder somewhere (Desktop is fine) - don't run it from
+   inside the zip.
+2. Double-click "Install on Windows.bat".
+   If Windows shows a blue "Windows protected your PC" box, click
+   "More info" then "Run anyway".
+3. Close After Effects and start it again.
+4. Window > Extensions > TwitchSim
+
+
+HOW TO USE IT
+-------------
+Set up the chat in the Chat and Look tabs (live preview on the right), then
+open the After Effects tab and hit "Build in After Effects".
+
+Everything lands in a "TwitchSim - <comp name>" folder in your project. Move
+or scale the whole chat with the "TwitchSim Controls" null at the top of the
+layer stack - its "TwitchSim Controls" effect holds the animation style,
+speed, spacing, colours, outline, shadow and background, all keyframable.
+
+Building again with the same comp name updates that comp in place, so
+anywhere you've already used it stays valid.
+
+Badge and emote images are downloaded from Twitch's / 7TV's / FFZ's public
+servers the first time they're used, so the first build wants an internet
+connection.
+
+
+IF SOMETHING GOES WRONG
+-----------------------
+Panel isn't in the Extensions menu
+  Check the After Effects version first (see WHAT YOU NEED above) - that's
+  the most common cause. Otherwise make sure After Effects was fully quit,
+  not just the project closed, and reopened after installing. Then run the
+  installer once more.
+
+Panel opens but is blank / white
+  Close the panel, restart After Effects, open it again. It loads its
+  interface on open and occasionally needs a second try.
+
+A build fails partway
+  In After Effects: Settings (or Preferences) > Scripting & Expressions >
+  tick "Allow Scripts to Write Files and Access Network", restart AE.
+
+Still stuck
+  Send a screenshot of the panel - it prints what step it failed on.
+
+
+DON'T WANT TO INSTALL ANYTHING?
+-------------------------------
+The same tool runs in a browser, no install, and exports transparent video
+(ProRes 4444, WebM alpha, PNG sequence) instead of AE layers:
+
+  https://newomp4.github.io/twitchsim/
+
+Use Chrome, Edge or Brave. Nothing is uploaded - it all runs on your machine.
+
+
+UNINSTALL
+---------
+Run "Uninstall on Mac.command" / "Uninstall on Windows.bat" and restart
+After Effects.
+
+MIT licensed - https://github.com/newomp4/twitchsim

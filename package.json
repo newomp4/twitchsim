@@ -14,7 +14,8 @@
     "deploy": "npm run build:pages && gh-pages -d dist -m \"Deploy to GitHub Pages\"",
     "build:cep": "vite build --mode cep",
     "cep:install": "npm run build:cep && node scripts/install-cep.mjs",
-    "cep:link": "npm run build:cep && node scripts/install-cep.mjs --link"
+    "cep:link": "npm run build:cep && node scripts/install-cep.mjs --link",
+    "package": "npm run build:cep && node scripts/package-panel.mjs"
   },
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.15",
